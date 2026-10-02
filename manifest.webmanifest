@@ -1,0 +1,13 @@
+{
+  "name": "Sổ topping",
+  "short_name": "Topping",
+  "description": "Quản lý ca bán và topping",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f6ef",
+  "theme_color": "#2563eb",
+  "icons": [
+    {"src":"./public/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}
