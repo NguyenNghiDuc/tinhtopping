@@ -1,0 +1,302 @@
+/* Statistics page polish: spacing, hierarchy, responsive layout */
+#view-statistics {
+  --stats-radius: 14px;
+  --stats-gap: 16px;
+}
+
+#view-statistics > .toolbar {
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+#view-statistics > .toolbar > div:first-child {
+  min-width: 0;
+}
+
+#view-statistics > .toolbar .field-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#view-statistics #statisticsMonth,
+#view-statistics #toppingMonth,
+#view-statistics #toppingDate {
+  min-height: 40px;
+  border-radius: 9px;
+}
+
+#view-statistics #statisticsOverview {
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+#view-statistics #statisticsOverview .overview-card {
+  min-height: 132px;
+  padding: 18px 20px;
+  border-radius: var(--stats-radius);
+  box-shadow: 0 7px 22px rgba(15, 23, 42, .04);
+}
+
+#view-statistics #statisticsOverview .overview-icon {
+  width: 38px;
+  height: 38px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+}
+
+#view-statistics #statisticsOverview .overview-card p {
+  margin: 0 0 10px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+#view-statistics #statisticsOverview .overview-card strong {
+  font: 800 22px 'Manrope', sans-serif;
+  color: var(--ink);
+}
+
+#view-statistics .stats-panel {
+  overflow: hidden;
+  margin-bottom: var(--stats-gap);
+  border-radius: var(--stats-radius);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .045);
+}
+
+#view-statistics .stats-panel > .panel-title {
+  padding: 18px 20px 14px;
+}
+
+#view-statistics .stats-panel > .panel-title h3 {
+  font-size: 15px;
+}
+
+#view-statistics .employee-report-toolbar {
+  display: grid;
+  grid-template-columns: auto minmax(210px, 280px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px 12px;
+  margin: 0;
+  padding: 0 20px 16px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+#view-statistics .employee-report-toolbar > strong {
+  font-size: 12px;
+  color: #334155;
+  white-space: nowrap;
+}
+
+#view-statistics .employee-report-toolbar select {
+  width: 100%;
+  min-height: 40px;
+  margin: 0;
+  border-radius: 9px;
+}
+
+#view-statistics #employeeReportCard:empty {
+  display: none;
+}
+
+#view-statistics .employee-report-card {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  padding: 14px;
+  border-radius: 11px;
+  background: #f8fafc;
+}
+
+#view-statistics .stats-panel > .table-scroll {
+  border-top: 0;
+}
+
+#view-statistics .stats-panel .data-table {
+  width: 100%;
+}
+
+#view-statistics .stats-panel .data-table thead th {
+  height: 42px;
+  padding: 10px 14px;
+  color: #64748b;
+  background: #fafbf8;
+  font-size: 10px;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+
+#view-statistics .stats-panel .data-table tbody td {
+  padding: 12px 14px;
+}
+
+#view-statistics #employeeStatsEmpty {
+  margin: 0;
+  padding: 26px 20px;
+  border-top: 1px solid #edf2f7;
+}
+
+#view-statistics #employeeReportPanel {
+  margin: 0;
+  padding: 18px 20px 20px;
+  border-top: 1px solid #e8edf3;
+  background: #fbfcfe;
+}
+
+#view-statistics #employeeReportPanel .panel-title {
+  margin-bottom: 12px;
+}
+
+#view-statistics #employeeReportPanel .panel-title h3 {
+  font-size: 14px;
+}
+
+#view-statistics .employee-report-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+  max-width: 520px;
+  margin: 0 0 14px;
+}
+
+#view-statistics .employee-report-controls label {
+  gap: 6px;
+}
+
+#view-statistics .employee-report-controls select {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  border-radius: 9px;
+}
+
+#view-statistics .employee-report-controls button {
+  min-height: 40px;
+  border-radius: 9px;
+}
+
+#view-statistics .month-insights {
+  gap: 14px;
+  margin: 0 0 var(--stats-gap);
+}
+
+#view-statistics .insight-panel {
+  padding: 18px 20px;
+  border-radius: var(--stats-radius);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, .04);
+}
+
+#view-statistics .insight-panel h3 {
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+#view-statistics .insight-row {
+  padding: 9px 0;
+}
+
+#view-statistics .insight-row span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+#view-statistics .insight-row strong {
+  font-size: 12px;
+}
+
+#view-statistics .stats-panel:last-of-type {
+  padding-bottom: 0;
+}
+
+#view-statistics .stats-panel:last-of-type > .panel-title {
+  padding-bottom: 10px;
+}
+
+#view-statistics .stats-period {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 0 20px 14px;
+}
+
+#view-statistics .stats-period label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+#view-statistics .segmented-control {
+  border-radius: 9px;
+  padding: 3px;
+}
+
+#view-statistics .segment {
+  min-height: 30px;
+  border-radius: 7px;
+  padding: 6px 12px;
+}
+
+html.dark #view-statistics .employee-report-toolbar,
+html.dark #view-statistics #employeeReportPanel,
+html.dark #view-statistics .employee-report-card,
+html.dark #view-statistics .stats-panel .data-table thead th {
+  background: #111827 !important;
+  border-color: #334155 !important;
+}
+
+html.dark #view-statistics .employee-report-toolbar > strong,
+html.dark #view-statistics #statisticsOverview .overview-card strong {
+  color: #f8fafc;
+}
+
+@media (max-width: 900px) {
+  #view-statistics .employee-report-toolbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  #view-statistics .employee-report-toolbar > strong {
+    white-space: normal;
+  }
+}
+
+@media (max-width: 760px) {
+  #view-statistics > .toolbar {
+    align-items: stretch;
+  }
+
+  #view-statistics > .toolbar .toolbar-actions,
+  #view-statistics > .toolbar .field-label {
+    width: 100%;
+  }
+
+  #view-statistics #statisticsMonth {
+    width: 100%;
+  }
+
+  #view-statistics #statisticsOverview {
+    grid-template-columns: 1fr;
+  }
+
+  #view-statistics #statisticsOverview .overview-card {
+    min-height: 0;
+  }
+
+  #view-statistics .employee-report-controls {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+
+  #view-statistics .employee-report-controls > * {
+    width: 100%;
+  }
+
+  #view-statistics .stats-period {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  #view-statistics .stats-period input {
+    width: 100%;
+  }
+}
