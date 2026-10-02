@@ -40,9 +40,10 @@ create table if not exists public.shifts (
   note text not null default '',
   created_by uuid not null default auth.uid() references auth.users(id),
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint shifts_one_per_day unique (sales_date, shift)
+  updated_at timestamptz not null default now()
 );
+
+alter table public.shifts drop constraint if exists shifts_one_per_day;
 
 create index if not exists shifts_date_idx on public.shifts (sales_date desc);
 create index if not exists shifts_employee_date_idx on public.shifts (employee_id, sales_date desc);
@@ -255,14 +256,14 @@ begin
       insert into public.shifts (id, sales_date, shift, employee_id, note, created_by, created_at, updated_at)
       select id, sales_date, shift, employee_id, note, created_by, created_at, updated_at
       from public.sales_records
-      on conflict (sales_date, shift) do nothing
+      on conflict (id) do nothing
     $migration$;
 
     execute $migration$
       insert into public.shift_toppings (shift_id, topping_type_id, quantity)
       select shift_row.id, topping.id, coalesce(sales.quantities[topping.sort_order + 1], 0)
       from public.sales_records as sales
-      join public.shifts as shift_row on shift_row.sales_date = sales.sales_date and shift_row.shift = sales.shift
+      join public.shifts as shift_row on shift_row.id = sales.id
       cross join public.topping_types as topping
       where coalesce(sales.quantities[topping.sort_order + 1], 0) > 0
       on conflict (shift_id, topping_type_id) do nothing

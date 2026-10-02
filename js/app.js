@@ -3,7 +3,6 @@ import {
   calculateEmployeeTotals,
   calculateRecordsTotals,
   calculateShiftTotals,
-  calculateToppingSummary,
   normalizeQuantity
 } from './calculator.js';
 import {
@@ -68,24 +67,74 @@ function renderOverview(container, selectedRecords) {
 function renderRecords() {
   const monthRecords = getMonthRecords($('#recordsMonth').value).sort((left, right) => {
     const dateOrder = right.date.localeCompare(left.date);
-    return dateOrder || SHIFTS.findIndex((shift) => shift.id === left.shift) - SHIFTS.findIndex((shift) => shift.id === right.shift);
+    const shiftOrder = SHIFTS.findIndex((shift) => shift.id === left.shift) - SHIFTS.findIndex((shift) => shift.id === right.shift);
+    return dateOrder || shiftOrder || (left.createdAt || '').localeCompare(right.createdAt || '');
   });
   renderOverview($('#monthOverview'), monthRecords);
   $('#recordsEmpty').hidden = monthRecords.length > 0;
-  $('#recordsBody').innerHTML = monthRecords.map((record) => {
-    const totals = calculateShiftTotals(record.quantities, toppingTypes);
-    const shiftClass = record.shift === 'afternoon' ? 'afternoon' : record.shift === 'evening' ? 'evening' : '';
-    const canEdit = isManager || record.createdBy === currentUser?.id;
-    const noteText = record.note ? escapeHtml(record.note) : '—';
-    return `<tr data-record-id="${escapeHtml(record.id)}" tabindex="0" aria-label="${escapeHtml(record.date)} ${escapeHtml(shiftLabel(record.shift))}, bấm để sửa topping">
-      <td data-label="Ngày">${formatDate(record.date)}</td>
-      <td data-label="Ca"><span class="shift-label ${shiftClass}">${escapeHtml(shiftLabel(record.shift))}</span></td>
-      <td class="employee-name" data-label="Nhân viên đứng ca">${escapeHtml(record.employee)}</td>
-      <td class="numeric" data-label="Số topping">${formatNumber(totals.totalToppings)}</td>
-      <td class="numeric row-total" data-label="Tổng tiền">${formatMoney(totals.totalMoney)}</td>
-      <td data-label="Ghi chú">${noteText}</td>
-      <td data-label="Thao tác"><div class="row-actions">${canEdit ? `<button class="table-action" type="button" data-action="edit" data-record-id="${escapeHtml(record.id)}"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>Sửa</button><button class="table-action delete" type="button" data-action="delete" data-record-id="${escapeHtml(record.id)}"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>Xóa</button>` : ''}</div></td>
-    </tr>`;
+  const recordsByDate = new Map();
+  monthRecords.forEach((record) => {
+    const dayRecords = recordsByDate.get(record.date) || [];
+    dayRecords.push(record);
+    recordsByDate.set(record.date, dayRecords);
+  });
+
+  $('#recordsBody').innerHTML = [...recordsByDate.entries()].map(([date, dayRecords]) => {
+    const dayTotals = calculateRecordsTotals(dayRecords, toppingTypes);
+    const shiftCards = SHIFTS.map((shift) => {
+      const shiftRecords = dayRecords.filter((record) => record.shift === shift.id);
+      const styles = {
+        morning: {
+          className: 'morning',
+          icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg>'
+        },
+        afternoon: {
+          className: 'afternoon',
+          icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18h18M5 18a7 7 0 0 1 14 0M12 3v3M5.64 6.64l2.12 2.12m8.48 0 2.12-2.12"/></svg>'
+        },
+        evening: {
+          className: 'evening',
+          icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 8.5 8.5 0 1 0 20.5 14.5Z"/><path d="M16 4v4m-2-2h4"/></svg>'
+        }
+      }[shift.id];
+
+      if (!shiftRecords.length) {
+        return `<article class="shift-history-card ${styles.className}">
+          <header class="shift-history-heading">${styles.icon}<h3>${escapeHtml(shift.label).toLocaleUpperCase('vi')}</h3></header>
+          <p class="shift-empty">Chưa có dữ liệu</p>
+        </article>`;
+      }
+
+      const shiftTotals = calculateRecordsTotals(shiftRecords, toppingTypes);
+      const recordRows = shiftRecords.map((record) => {
+        const totals = calculateShiftTotals(record.quantities, toppingTypes);
+        const canEdit = isManager || record.createdBy === currentUser?.id;
+        const noteText = record.note ? escapeHtml(record.note) : '—';
+        const recordId = escapeHtml(record.id);
+        return `<tr class="shift-row" data-record-id="${recordId}" tabindex="0" aria-label="${escapeHtml(date)} ${escapeHtml(shift.label)}, ${escapeHtml(record.employee)}, bấm để sửa topping">
+          <td class="employee-name" data-label="Nhân viên">${escapeHtml(record.employee)}</td>
+          <td class="numeric" data-label="Số topping">${formatNumber(totals.totalToppings)} topping</td>
+          <td class="numeric row-total" data-label="Tổng tiền">${formatMoney(totals.totalMoney)}</td>
+          <td data-label="Ghi chú">${noteText}</td>
+          <td data-label="Thao tác"><div class="row-actions">${canEdit ? `<button class="table-action" type="button" data-action="edit" data-record-id="${recordId}"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>Sửa</button><button class="table-action delete" type="button" data-action="delete" data-record-id="${recordId}"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg>Xóa</button>` : ''}</div></td>
+        </tr>`;
+      }).join('');
+
+      return `<article class="shift-history-card ${styles.className}">
+        <header class="shift-history-heading">${styles.icon}<h3>${escapeHtml(shift.label).toLocaleUpperCase('vi')}</h3></header>
+        <div class="shift-table-scroll"><table class="data-table shift-history-table">
+          <thead><tr><th>Nhân viên</th><th class="numeric">Số topping</th><th class="numeric">Tổng tiền</th><th>Ghi chú</th><th><span class="visually-hidden">Thao tác</span></th></tr></thead>
+          <tbody>${recordRows}</tbody>
+          <tfoot><tr><td>TỔNG CA</td><td class="numeric">${formatNumber(shiftTotals.totalToppings)} topping</td><td class="numeric row-total">${formatMoney(shiftTotals.totalMoney)}</td><td colspan="2"></td></tr></tfoot>
+        </table></div>
+      </article>`;
+    }).join('');
+
+    return `<section class="history-day" aria-labelledby="history-day-${date}">
+      <h3 class="history-day-heading" id="history-day-${date}">${formatDate(date)}</h3>
+      <div class="history-shift-list">${shiftCards}</div>
+      <div class="history-day-total"><strong>TỔNG NGÀY</strong><strong>${formatNumber(dayTotals.totalToppings)} topping <span aria-hidden="true">|</span> ${formatMoney(dayTotals.totalMoney)}</strong></div>
+    </section>`;
   }).join('');
 }
 
@@ -94,8 +143,8 @@ function renderDailySummary() {
   const selectedRecords = dayRecords.filter((record) => record.date === date);
   const totals = calculateRecordsTotals(selectedRecords, toppingTypes);
   const shiftRows = SHIFTS.map((shift) => {
-    const record = selectedRecords.find((item) => item.shift === shift.id);
-    const shiftTotals = calculateShiftTotals(record?.quantities || [], toppingTypes);
+    const shiftRecords = selectedRecords.filter((record) => record.shift === shift.id);
+    const shiftTotals = calculateRecordsTotals(shiftRecords, toppingTypes);
     return `<div class="daily-summary-row"><span>${escapeHtml(shift.label)}</span><strong>${formatMoney(shiftTotals.totalMoney)} · ${formatNumber(shiftTotals.totalToppings)} topping</strong></div>`;
   }).join('');
   $('#dailySummary').innerHTML = `${shiftRows}<div class="daily-summary-row day-total"><span>Tổng cả ngày</span><strong>${formatMoney(totals.totalMoney)} · ${formatNumber(totals.totalToppings)} topping</strong></div>`;
@@ -131,12 +180,8 @@ async function renderToppingStatistics() {
     const periodRecords = toppingPeriod === 'month'
       ? await getSalesForMonth($('#toppingMonth').value)
       : await getSalesForDate($('#toppingDate').value);
-    const { toppings: toppingTotals, totalToppings, totalMoney } = calculateToppingSummary(periodRecords, toppingTypes);
-    const ranked = [...toppingTotals].sort((left, right) => right.quantity - left.quantity);
-    const bestSeller = totalToppings ? ranked[0] : null;
-    $('#bestSellerName').textContent = bestSeller?.name || 'Chưa có dữ liệu';
-    $('#bestSellerCount').textContent = `${formatNumber(bestSeller?.quantity || 0)} topping`;
-    $('#toppingStatsBody').innerHTML = `${toppingTotals.map((topping) => `<tr><td>${escapeHtml(topping.name)}</td><td class="numeric">${formatNumber(topping.quantity)}</td><td class="numeric">${formatMoney(topping.revenue)}</td></tr>`).join('')}<tr><td><strong>Tổng cộng</strong></td><td class="numeric"><strong>${formatNumber(totalToppings)}</strong></td><td class="numeric row-total"><strong>${formatMoney(totalMoney)}</strong></td></tr>`;
+    const totals = calculateRecordsTotals(periodRecords, toppingTypes);
+    $('#toppingStatsBody').innerHTML = `<tr><td>Topping</td><td class="numeric">${formatNumber(totals.totalToppings)}</td><td class="numeric">${formatMoney(totals.totalMoney)}</td></tr><tr><td><strong>Tổng cộng</strong></td><td class="numeric"><strong>${formatNumber(totals.totalToppings)}</strong></td><td class="numeric row-total"><strong>${formatMoney(totals.totalMoney)}</strong></td></tr>`;
   } catch (error) {
     console.error('Không tải được thống kê topping từ Supabase.', error);
     showToast(readableError(error));
@@ -324,7 +369,6 @@ async function saveShift(event) {
   saveButton.textContent = 'Đang lưu...';
   const date = $('#shiftDate').value;
   const shift = $('#shiftName').value;
-  const duplicate = records.find((record) => record.date === date && record.shift === shift && record.id !== editingId);
   const employeeId = $('#employeeId').value;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     saveButton.disabled = false;
@@ -341,12 +385,6 @@ async function saveShift(event) {
     saveButton.textContent = wasEditing ? 'Lưu thay đổi' : 'Lưu ca';
     return showFormError('Vui lòng chọn nhân viên đứng ca.');
   }
-  if (duplicate) {
-    saveButton.disabled = false;
-    saveButton.textContent = wasEditing ? 'Lưu thay đổi' : 'Lưu ca';
-    return showFormError(`Ngày này đã có ${shiftLabel(shift)}. Hãy sửa ca đã ghi nhận trong bảng.`);
-  }
-
   const record = { date, shift, employeeId, quantities: readQuantities(), note: $('#shiftNote').value.trim() };
   try {
     if (wasEditing) await updateSalesRecord(editingId, record);

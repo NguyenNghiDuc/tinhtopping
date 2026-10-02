@@ -30,6 +30,16 @@ function monthRange(month) {
   return { start: `${month}-01`, end: `${nextYear}-${String(nextMonth).padStart(2, '0')}-01` };
 }
 
+async function fetchAllShiftRows(buildQuery) {
+  const rows = [];
+  const pageSize = 1000;
+  for (let offset = 0; ; offset += pageSize) {
+    const page = throwIfError(await buildQuery().range(offset, offset + pageSize - 1));
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
+
 export async function signIn(email, password) {
   const client = requireSupabase();
   return throwIfError(await client.auth.signInWithPassword({ email, password }));
@@ -90,11 +100,13 @@ export async function updateEmployee(id, changes) {
 export async function getSalesForMonth(month) {
   const { start, end } = monthRange(month);
   const client = requireSupabase();
-  const [result, toppingTypes] = await Promise.all([
-    client.from('shifts').select(SHIFT_FIELDS).gte('sales_date', start).lt('sales_date', end).order('sales_date', { ascending: false }),
+  const [rows, toppingTypes] = await Promise.all([
+    fetchAllShiftRows(() => client.from('shifts').select(SHIFT_FIELDS)
+      .gte('sales_date', start).lt('sales_date', end)
+      .order('sales_date', { ascending: false }).order('shift').order('created_at')),
     getToppingTypes()
   ]);
-  return throwIfError(result).map((row) => mapShift(row, toppingTypes));
+  return rows.map((row) => mapShift(row, toppingTypes));
 }
 
 export async function getAllSalesRecords() {
@@ -113,11 +125,12 @@ export async function getAllSalesRecords() {
 
 export async function getSalesForDate(date) {
   const client = requireSupabase();
-  const [result, toppingTypes] = await Promise.all([
-    client.from('shifts').select(SHIFT_FIELDS).eq('sales_date', date).order('shift'),
+  const [rows, toppingTypes] = await Promise.all([
+    fetchAllShiftRows(() => client.from('shifts').select(SHIFT_FIELDS)
+      .eq('sales_date', date).order('shift').order('created_at')),
     getToppingTypes()
   ]);
-  return throwIfError(result).map((row) => mapShift(row, toppingTypes));
+  return rows.map((row) => mapShift(row, toppingTypes));
 }
 
 async function saveSalesRecord(record) {
