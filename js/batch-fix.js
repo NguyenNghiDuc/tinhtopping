@@ -2,6 +2,7 @@ import { requireSupabase } from './supabase.js';
 
 // Giữ form batch gọn: khi mở/ngày thay đổi, chỉ giữ các dòng đã có dữ liệu.
 // Đồng thời thêm nút xóa toàn bộ dữ liệu của một ngày ở đầu mỗi card ngày.
+// Trang nhân viên có bộ lọc Tất cả / Đang làm / Nghỉ làm.
 (() => {
   const container = document.querySelector('#shiftBatchColumns');
   const editor = document.querySelector('#shiftEditor');
@@ -11,6 +12,7 @@ import { requireSupabase } from './supabase.js';
   let pendingCleanup = false;
   let cleaning = false;
   let deletingDay = false;
+  let employeeStatusMode = 'active';
 
   function requestCleanup() {
     pendingCleanup = true;
@@ -189,6 +191,143 @@ import { requireSupabase } from './supabase.js';
     }
   }
 
+  function installEmployeeStatusStyles() {
+    if (document.querySelector('#employee-status-filter-style')) return;
+    const style = document.createElement('style');
+    style.id = 'employee-status-filter-style';
+    style.textContent = `
+      .employee-status-filter {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        padding: 4px;
+        border: 1px solid #dbe3ef;
+        border-radius: 10px;
+        background: #f8fafc;
+      }
+      .employee-status-filter button {
+        min-height: 34px;
+        padding: 7px 13px;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        color: #64748b;
+        font: 700 12px 'DM Sans', sans-serif;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: background .15s ease, color .15s ease, box-shadow .15s ease;
+      }
+      .employee-status-filter button:hover {
+        color: #1d4ed8;
+        background: #eff6ff;
+      }
+      .employee-status-filter button.active {
+        color: #fff;
+        background: #2563eb;
+        box-shadow: 0 2px 6px rgba(37, 99, 235, .22);
+      }
+      .employee-status-filter button[data-employee-status="inactive"].active {
+        background: #64748b;
+        box-shadow: 0 2px 6px rgba(100, 116, 139, .22);
+      }
+      .employee-original-inactive-toggle {
+        display: none !important;
+      }
+      @media (max-width: 680px) {
+        .employee-toolbar {
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .employee-status-filter {
+          width: 100%;
+        }
+        .employee-status-filter button {
+          flex: 1;
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function applyEmployeeStatusFilter() {
+    const body = document.querySelector('#employeesBody');
+    if (!body) return;
+
+    const rows = [...body.querySelectorAll('tr')];
+    rows.forEach((row) => {
+      if (employeeStatusMode === 'inactive') {
+        row.hidden = !row.querySelector('.status-badge.inactive');
+      } else {
+        row.hidden = false;
+      }
+    });
+
+    const emptyState = document.querySelector('#employeesEmpty');
+    if (emptyState) {
+      const hasVisibleRows = rows.some((row) => !row.hidden);
+      emptyState.hidden = hasVisibleRows;
+      if (!hasVisibleRows && employeeStatusMode === 'inactive') {
+        emptyState.textContent = 'Không có nhân viên nghỉ làm phù hợp.';
+      } else if (!hasVisibleRows) {
+        emptyState.textContent = 'Không tìm thấy nhân viên.';
+      }
+    }
+  }
+
+  function setEmployeeStatusMode(mode) {
+    employeeStatusMode = mode;
+    const checkbox = document.querySelector('#showInactiveEmployees');
+    if (!checkbox) return;
+
+    // app.js đã có logic: bỏ chọn = chỉ đang làm, chọn = gồm cả nhân viên đã nghỉ.
+    checkbox.checked = mode !== 'active';
+    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+
+    document.querySelectorAll('[data-employee-status]').forEach((button) => {
+      button.classList.toggle('active', button.dataset.employeeStatus === mode);
+    });
+
+    queueMicrotask(applyEmployeeStatusFilter);
+  }
+
+  function installEmployeeStatusFilter() {
+    const checkbox = document.querySelector('#showInactiveEmployees');
+    if (!checkbox || document.querySelector('.employee-status-filter')) return;
+
+    const oldLabel = checkbox.closest('label');
+    const toolbar = checkbox.closest('.employee-toolbar');
+    if (!oldLabel || !toolbar) return;
+
+    installEmployeeStatusStyles();
+    oldLabel.classList.add('employee-original-inactive-toggle');
+
+    const filter = document.createElement('div');
+    filter.className = 'employee-status-filter';
+    filter.setAttribute('role', 'group');
+    filter.setAttribute('aria-label', 'Lọc trạng thái nhân viên');
+    filter.innerHTML = `
+      <button type="button" data-employee-status="all">Tất cả</button>
+      <button type="button" data-employee-status="active" class="active">Đang làm</button>
+      <button type="button" data-employee-status="inactive">Nghỉ làm</button>
+    `;
+    toolbar.appendChild(filter);
+
+    filter.addEventListener('click', (event) => {
+      const button = event.target.closest('[data-employee-status]');
+      if (!button) return;
+      setEmployeeStatusMode(button.dataset.employeeStatus);
+    });
+
+    const body = document.querySelector('#employeesBody');
+    if (body) {
+      const observer = new MutationObserver(() => queueMicrotask(applyEmployeeStatusFilter));
+      observer.observe(body, { childList: true, subtree: true });
+    }
+
+    const search = document.querySelector('#employeeSearch');
+    if (search) search.addEventListener('input', () => queueMicrotask(applyEmployeeStatusFilter));
+  }
+
   // Mở form nhập mới/sửa và xử lý nút xóa cả ngày.
   document.addEventListener('click', (event) => {
     const target = event.target;
@@ -230,4 +369,6 @@ import { requireSupabase } from './supabase.js';
     recordsObserver.observe(recordsBody, { childList: true, subtree: true });
     ensureDeleteDayButtons();
   }
+
+  installEmployeeStatusFilter();
 })();
