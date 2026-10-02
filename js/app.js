@@ -76,12 +76,14 @@ function renderRecords() {
     const totals = calculateShiftTotals(record.quantities, toppingTypes);
     const shiftClass = record.shift === 'afternoon' ? 'afternoon' : record.shift === 'evening' ? 'evening' : '';
     const canEdit = isManager || record.createdBy === currentUser?.id;
+    const noteText = record.note ? escapeHtml(record.note) : '—';
     return `<tr data-record-id="${escapeHtml(record.id)}" tabindex="0" aria-label="${escapeHtml(record.date)} ${escapeHtml(shiftLabel(record.shift))}, bấm để sửa topping">
       <td data-label="Ngày">${formatDate(record.date)}</td>
       <td data-label="Ca"><span class="shift-label ${shiftClass}">${escapeHtml(shiftLabel(record.shift))}</span></td>
       <td class="employee-name" data-label="Nhân viên đứng ca">${escapeHtml(record.employee)}</td>
-      <td class="numeric" data-label="Tổng topping">${formatNumber(totals.totalToppings)}</td>
-      <td class="numeric row-total" data-label="Tổng tiền topping">${formatMoney(totals.totalMoney)}</td>
+      <td class="numeric" data-label="Số topping">${formatNumber(totals.totalToppings)}</td>
+      <td class="numeric row-total" data-label="Tổng tiền">${formatMoney(totals.totalMoney)}</td>
+      <td data-label="Ghi chú">${noteText}</td>
       <td data-label="Thao tác"><div class="row-actions">${canEdit ? `<button class="table-action" type="button" data-action="edit" data-record-id="${escapeHtml(record.id)}">Sửa</button><button class="table-action delete" type="button" data-action="delete" data-record-id="${escapeHtml(record.id)}">Xóa</button>` : ''}</div></td>
     </tr>`;
   }).join('');
@@ -180,12 +182,22 @@ function updateFormTotals() {
   $('#totalMoney').textContent = formatMoney(totals.totalMoney);
 }
 
+function syncShiftButtons() {
+  const selectedShift = $('#shiftName').value;
+  $$('.shift-option').forEach((button) => {
+    const active = button.dataset.shift === selectedShift;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+}
+
 function setEditor(record = null) {
   editingId = record?.id || null;
   $('#editorHeading').textContent = record ? 'Sửa ca bán' : 'Nhập topping';
   $('#saveShiftButton').textContent = record ? 'Lưu thay đổi' : 'Lưu ca';
   $('#shiftDate').value = record?.date || today;
   $('#shiftName').value = record?.shift || getDefaultShift(today);
+  syncShiftButtons();
   renderEmployeeOptions(record?.employeeId || '');
   $('#employeeId').value = record?.employeeId || '';
   $('#shiftNote').value = record?.note || '';
@@ -289,13 +301,28 @@ async function refreshAfterSalesChange(date) {
 
 async function saveShift(event) {
   event.preventDefault();
+  const saveButton = $('#saveShiftButton');
+  saveButton.disabled = true;
+  saveButton.textContent = 'Đang lưu...';
   const date = $('#shiftDate').value;
   const shift = $('#shiftName').value;
   const duplicate = records.find((record) => record.date === date && record.shift === shift && record.id !== editingId);
   const employeeId = $('#employeeId').value;
-  if (!date) return showFormError('Vui lòng chọn ngày bán.');
-  if (!employeeId) return showFormError('Vui lòng chọn nhân viên đứng ca.');
-  if (duplicate) return showFormError(`Ngày này đã có ${shiftLabel(shift)}. Hãy sửa ca đã ghi nhận trong bảng.`);
+  if (!date) {
+    saveButton.disabled = false;
+    saveButton.textContent = editingId ? 'Lưu thay đổi' : 'Lưu ca';
+    return showFormError('Vui lòng chọn ngày bán.');
+  }
+  if (!employeeId) {
+    saveButton.disabled = false;
+    saveButton.textContent = editingId ? 'Lưu thay đổi' : 'Lưu ca';
+    return showFormError('Vui lòng chọn nhân viên đứng ca.');
+  }
+  if (duplicate) {
+    saveButton.disabled = false;
+    saveButton.textContent = editingId ? 'Lưu thay đổi' : 'Lưu ca';
+    return showFormError(`Ngày này đã có ${shiftLabel(shift)}. Hãy sửa ca đã ghi nhận trong bảng.`);
+  }
 
   const record = { date, shift, employeeId, quantities: readQuantities(), note: $('#shiftNote').value.trim() };
   try {
@@ -306,6 +333,9 @@ async function saveShift(event) {
     showToast(editingId ? 'Đã cập nhật ca bán.' : 'Đã lưu ca bán.');
   } catch (error) {
     showFormError(readableError(error));
+  } finally {
+    saveButton.disabled = false;
+    saveButton.textContent = editingId ? 'Lưu thay đổi' : 'Lưu ca';
   }
 }
 
@@ -529,6 +559,10 @@ function initialize() {
   $('#statisticsMonth').value = month;
   $('#toppingMonth').value = month;
   $('#toppingDate').value = today;
+  $$('.shift-option').forEach((button) => button.addEventListener('click', () => {
+    $('#shiftName').value = button.dataset.shift;
+    syncShiftButtons();
+  }));
   $$('.nav-link').forEach((button) => button.addEventListener('click', () => navigate(button.dataset.view)));
   $('#signInForm').addEventListener('submit', handleSignIn);
   $('#signOutButton').addEventListener('click', async () => {

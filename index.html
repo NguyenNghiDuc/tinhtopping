@@ -65,7 +65,7 @@
         <section class="panel table-panel" aria-label="Các ca bán trong tháng">
           <div class="table-scroll">
             <table class="data-table">
-              <thead><tr><th>Ngày</th><th>Ca</th><th>Nhân viên đứng ca</th><th class="numeric">Tổng topping</th><th class="numeric">Tổng tiền topping</th><th><span class="visually-hidden">Thao tác</span></th></tr></thead>
+              <thead><tr><th>Ngày</th><th>Ca</th><th>Nhân viên đứng ca</th><th class="numeric">Số topping</th><th class="numeric">Tổng tiền</th><th>Ghi chú</th><th><span class="visually-hidden">Thao tác</span></th></tr></thead>
               <tbody id="recordsBody"></tbody>
             </table>
           </div>
@@ -80,7 +80,11 @@
           <form id="shiftForm">
             <div class="record-fields">
               <label class="form-field"><span>Ngày</span><input id="shiftDate" name="date" type="date" required></label>
-              <label class="form-field"><span>Ca</span><select id="shiftName" name="shift" required><option value="morning">Ca Sáng</option><option value="afternoon">Ca Chiều</option><option value="evening">Ca Tối</option></select></label>
+              <div class="form-field shift-field"><span>Ca</span><div class="shift-toggle" role="group" aria-label="Chọn ca">
+                <button class="shift-option active" type="button" data-shift="morning">Sáng</button>
+                <button class="shift-option" type="button" data-shift="afternoon">Chiều</button>
+                <button class="shift-option" type="button" data-shift="evening">Tối</button>
+              </div><select id="shiftName" name="shift" hidden required><option value="morning">Ca Sáng</option><option value="afternoon">Ca Chiều</option><option value="evening">Ca Tối</option></select></div>
               <div class="form-field employee-field"><label for="employeeId">Nhân viên đứng ca</label><div class="field-combo"><select id="employeeId" name="employeeId" required></select><button class="button button-quiet manager-only" id="quickAddEmployeeButton" type="button" hidden>＋ Thêm nhân viên</button></div></div>
             </div>
             <div class="quick-employee-form" id="quickEmployeeForm" hidden>
