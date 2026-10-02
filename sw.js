@@ -1,4 +1,4 @@
-const CACHE = 'tinhtopping-v10';
+const CACHE = 'tinhtopping-v11';
 const ASSETS = [
   './',
   './index.html',
