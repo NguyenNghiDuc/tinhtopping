@@ -19,7 +19,7 @@ create index if not exists employees_active_name_idx on public.employees (active
 create table if not exists public.topping_types (
   id uuid primary key default gen_random_uuid(),
   name text not null unique check (length(trim(name)) between 1 and 80),
-  unit_price integer not null default 3000 check (unit_price > 0),
+  unit_price integer not null default 1000 check (unit_price > 0),
   sort_order smallint not null unique,
   active boolean not null default true,
   created_at timestamptz not null default now(),
@@ -27,16 +27,10 @@ create table if not exists public.topping_types (
 );
 
 insert into public.topping_types (name, unit_price, sort_order) values
-  ('Trân châu đen', 3000, 0),
-  ('Trân châu trắng', 3000, 1),
-  ('Thạch rau câu', 3000, 2),
-  ('Pudding trứng', 3000, 3),
-  ('Bánh flan', 3000, 4),
-  ('Thạch phô mai', 3000, 5),
-  ('Thạch trái cây', 3000, 6),
-  ('Sương sáo', 3000, 7),
-  ('Khúc bạch', 3000, 8)
+  ('Topping', 1000, 0)
 on conflict do nothing;
+
+update public.topping_types set unit_price = 1000 where unit_price <> 1000;
 
 create table if not exists public.shifts (
   id uuid primary key default gen_random_uuid(),

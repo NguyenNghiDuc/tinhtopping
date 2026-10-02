@@ -24,10 +24,8 @@ export function normalizeQuantity(value) {
 
 export function calculateShiftTotals(quantities, toppingTypes = TOPPINGS) {
   const totalToppings = quantities.reduce((total, quantity) => total + normalizeQuantity(quantity), 0);
-  const totalMoney = quantities.reduce((total, quantity, index) => {
-    const type = toppingTypes[index];
-    const unitPrice = typeof type === 'string' ? UNIT_PRICE : (Number(type?.unit_price) || UNIT_PRICE);
-    return total + normalizeQuantity(quantity) * unitPrice;
+  const totalMoney = quantities.reduce((total, quantity) => {
+    return total + normalizeQuantity(quantity) * UNIT_PRICE;
   }, 0);
   return { totalToppings, totalMoney };
 }
@@ -59,7 +57,7 @@ export function calculateEmployeeTotals(records, toppingTypes = TOPPINGS) {
 export function calculateToppingTotals(records, toppingTypes = TOPPINGS) {
   const totals = toppingTypes.map((type) => ({
     name: typeof type === 'string' ? type : type.name,
-    unitPrice: typeof type === 'string' ? UNIT_PRICE : Number(type.unit_price) || UNIT_PRICE,
+    unitPrice: UNIT_PRICE,
     quantity: 0,
     revenue: 0
   }));
