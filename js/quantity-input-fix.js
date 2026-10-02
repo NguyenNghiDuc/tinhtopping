@@ -119,6 +119,18 @@
     });
   }
 
+  // convenience.js used add-all.click() while restoring a draft. That made all
+  // employees appear even when the user only wanted to add one employee.
+  // Allow the real "+ Thêm tất cả nhân viên" button, but block synthetic clicks.
+  document.addEventListener('click', (event) => {
+    const addAll = event.target instanceof Element
+      ? event.target.closest('[data-batch-action="add-all"]')
+      : null;
+    if (!addAll || event.isTrusted) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+
   installSelectionStyle();
   document.addEventListener('DOMContentLoaded', () => {
     installSelectionStyle();
