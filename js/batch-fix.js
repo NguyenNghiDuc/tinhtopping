@@ -1,49 +1,13 @@
 import { requireSupabase } from './supabase.js';
 
-// Giữ form batch gọn: khi mở/ngày thay đổi, chỉ giữ các dòng đã có dữ liệu.
-// Đồng thời thêm nút xóa toàn bộ dữ liệu của một ngày ở đầu mỗi card ngày.
-// Trang nhân viên có bộ lọc Tất cả / Đang làm / Nghỉ làm.
+// Các hành vi nhập topping giờ do app.js xử lý trực tiếp.
+// File này chỉ giữ các tiện ích độc lập: xóa cả ngày và lọc trạng thái nhân viên.
+// Tuyệt đối không quan sát / tự xóa / render lại các dòng trong batch editor,
+// vì việc đó sẽ làm input mất focus trong lúc người dùng đang gõ.
 (() => {
-  const container = document.querySelector('#shiftBatchColumns');
-  const editor = document.querySelector('#shiftEditor');
-  const dateInput = document.querySelector('#shiftDate');
   const recordsBody = document.querySelector('#recordsBody');
-
-  let pendingCleanup = false;
-  let cleaning = false;
   let deletingDay = false;
   let employeeStatusMode = 'active';
-
-  function requestCleanup() {
-    pendingCleanup = true;
-  }
-
-  function cleanupPrefilledZeroRows() {
-    if (!container || !editor) return;
-    if (!pendingCleanup || cleaning || editor.hidden) return;
-    if (!container.querySelector('.batch-shift-card')) return;
-
-    cleaning = true;
-    try {
-      ['morning', 'afternoon', 'evening'].forEach((shiftId) => {
-        const column = document.querySelector(`#batch-column-${shiftId}`);
-        if (!column) return;
-        for (let guard = 0; guard < 200; guard += 1) {
-          const zeroRow = [...column.querySelectorAll('[data-batch-index]')].find((row) => {
-            const input = row.querySelector('[data-batch-quantity]');
-            return input && Number(input.value || 0) === 0;
-          });
-          if (!zeroRow) break;
-          const removeButton = zeroRow.querySelector('[data-batch-action="remove"]');
-          if (!removeButton) break;
-          removeButton.click();
-        }
-      });
-    } finally {
-      pendingCleanup = false;
-      cleaning = false;
-    }
-  }
 
   function formatDateVi(date) {
     const [year, month, day] = String(date).split('-');
@@ -100,8 +64,7 @@ import { requireSupabase } from './supabase.js';
   }
 
   function refreshUiAfterDelete(date) {
-    const deletedCard = recordsBody?.querySelector(`.day-record-card[data-date="${CSS.escape(date)}"]`);
-    if (deletedCard) deletedCard.remove();
+    recordsBody?.querySelector(`.day-record-card[data-date="${CSS.escape(date)}"]`)?.remove();
 
     const recordsMonth = document.querySelector('#recordsMonth');
     if (recordsMonth) recordsMonth.dispatchEvent(new Event('change', { bubbles: true }));
@@ -127,6 +90,7 @@ import { requireSupabase } from './supabase.js';
     if (deletingDay) return;
     const date = button.dataset.deleteDay;
     if (!date) return;
+
     const accepted = window.confirm(
       `Xóa toàn bộ dữ liệu ngày ${formatDateVi(date)}?\n\n` +
       'Tất cả Ca Sáng, Ca Chiều, Ca Tối và toàn bộ nhân viên trong ngày này sẽ bị xóa. Hành động này không thể hoàn tác.'
@@ -143,6 +107,7 @@ import { requireSupabase } from './supabase.js';
       const before = await client.from('shifts').select('id').eq('sales_date', date);
       if (before.error) throw before.error;
       const expectedIds = before.data || [];
+
       if (!expectedIds.length) {
         window.alert('Ngày này không còn dữ liệu để xóa.');
         refreshUiAfterDelete(date);
@@ -152,6 +117,7 @@ import { requireSupabase } from './supabase.js';
       const deleted = await client.from('shifts').delete().eq('sales_date', date).select('id');
       if (deleted.error) throw deleted.error;
       const deletedIds = deleted.data || [];
+
       if (deletedIds.length !== expectedIds.length) {
         window.alert(`Chỉ xóa được ${deletedIds.length}/${expectedIds.length} bản ghi. Có thể RLS đang giới hạn quyền xóa.`);
         refreshUiAfterDelete(date);
@@ -185,8 +151,12 @@ import { requireSupabase } from './supabase.js';
         cursor: pointer; white-space: nowrap;
       }
       .employee-status-filter button:hover { color: #1d4ed8; background: #eff6ff; }
-      .employee-status-filter button.active { color: #fff; background: #2563eb; box-shadow: 0 2px 6px rgba(37,99,235,.22); }
-      .employee-status-filter button[data-employee-status="inactive"].active { background: #64748b; box-shadow: 0 2px 6px rgba(100,116,139,.22); }
+      .employee-status-filter button.active {
+        color: #fff; background: #2563eb; box-shadow: 0 2px 6px rgba(37,99,235,.22);
+      }
+      .employee-status-filter button[data-employee-status="inactive"].active {
+        background: #64748b; box-shadow: 0 2px 6px rgba(100,116,139,.22);
+      }
       .employee-original-inactive-toggle { display: none !important; }
       @media (max-width: 680px) {
         .employee-toolbar { gap: 12px; flex-wrap: wrap; }
@@ -203,7 +173,9 @@ import { requireSupabase } from './supabase.js';
     body.querySelectorAll('[data-employee-action="toggle"]').forEach((button) => {
       const isActive = button.dataset.active === 'true';
       const nextText = isActive ? 'Nghỉ làm' : 'Đi làm lại';
-      const nextTitle = isActive ? 'Chuyển nhân viên sang trạng thái nghỉ làm' : 'Cho nhân viên đi làm lại';
+      const nextTitle = isActive
+        ? 'Chuyển nhân viên sang trạng thái nghỉ làm'
+        : 'Cho nhân viên đi làm lại';
       if (button.textContent !== nextText) button.textContent = nextText;
       if (button.title !== nextTitle) button.title = nextTitle;
       if (button.getAttribute('aria-label') !== nextTitle) button.setAttribute('aria-label', nextTitle);
@@ -218,12 +190,15 @@ import { requireSupabase } from './supabase.js';
     rows.forEach((row) => {
       row.hidden = employeeStatusMode === 'inactive' ? !row.querySelector('.status-badge.inactive') : false;
     });
+
     const emptyState = document.querySelector('#employeesEmpty');
-    if (emptyState) {
-      const hasVisibleRows = rows.some((row) => !row.hidden);
-      emptyState.hidden = hasVisibleRows;
-      if (!hasVisibleRows && employeeStatusMode === 'inactive') emptyState.textContent = 'Không có nhân viên nghỉ làm phù hợp.';
-      else if (!hasVisibleRows) emptyState.textContent = 'Không tìm thấy nhân viên.';
+    if (!emptyState) return;
+    const hasVisibleRows = rows.some((row) => !row.hidden);
+    emptyState.hidden = hasVisibleRows;
+    if (!hasVisibleRows && employeeStatusMode === 'inactive') {
+      emptyState.textContent = 'Không có nhân viên nghỉ làm phù hợp.';
+    } else if (!hasVisibleRows) {
+      emptyState.textContent = 'Không tìm thấy nhân viên.';
     }
   }
 
@@ -245,8 +220,10 @@ import { requireSupabase } from './supabase.js';
     const oldLabel = checkbox.closest('label');
     const toolbar = checkbox.closest('.employee-toolbar');
     if (!oldLabel || !toolbar) return;
+
     installEmployeeStatusStyles();
     oldLabel.classList.add('employee-original-inactive-toggle');
+
     const filter = document.createElement('div');
     filter.className = 'employee-status-filter';
     filter.setAttribute('role', 'group');
@@ -257,20 +234,19 @@ import { requireSupabase } from './supabase.js';
       <button type="button" data-employee-status="inactive">Nghỉ làm</button>
     `;
     toolbar.appendChild(filter);
+
     filter.addEventListener('click', (event) => {
       const button = event.target.closest('[data-employee-status]');
-      if (!button) return;
-      setEmployeeStatusMode(button.dataset.employeeStatus);
+      if (button) setEmployeeStatusMode(button.dataset.employeeStatus);
     });
+
     const body = document.querySelector('#employeesBody');
     if (body) {
-      const observer = new MutationObserver(() => queueMicrotask(applyEmployeeStatusFilter));
-      // Chỉ theo dõi việc app.js thay lại các hàng trong tbody.
-      // Không theo dõi subtree để tránh vòng lặp do chính việc đổi text nút tạo mutation mới.
-      observer.observe(body, { childList: true });
+      new MutationObserver(() => queueMicrotask(applyEmployeeStatusFilter))
+        .observe(body, { childList: true });
     }
-    const search = document.querySelector('#employeeSearch');
-    if (search) search.addEventListener('input', () => queueMicrotask(applyEmployeeStatusFilter));
+
+    document.querySelector('#employeeSearch')?.addEventListener('input', () => queueMicrotask(applyEmployeeStatusFilter));
     renameEmployeeStatusButtons();
   }
 
@@ -278,35 +254,15 @@ import { requireSupabase } from './supabase.js';
     const target = event.target;
     if (!(target instanceof Element)) return;
     const deleteDayButton = target.closest('[data-delete-day]');
-    if (deleteDayButton) {
-      event.preventDefault();
-      event.stopPropagation();
-      void deleteWholeDay(deleteDayButton);
-      return;
-    }
-    if (target.closest('#addShiftButton')) {
-      requestCleanup();
-      return;
-    }
-    const recordArea = target.closest('#recordsBody');
-    if (!recordArea) return;
-    if (target.closest('[data-action="delete"]')) return;
-    if (target.closest('[data-action="edit"], [data-record-id]')) requestCleanup();
+    if (!deleteDayButton) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void deleteWholeDay(deleteDayButton);
   }, true);
 
-  if (dateInput) dateInput.addEventListener('change', requestCleanup, true);
-
-  if (container && editor) {
-    const editorObserver = new MutationObserver(() => {
-      if (!pendingCleanup || cleaning) return;
-      queueMicrotask(cleanupPrefilledZeroRows);
-    });
-    editorObserver.observe(container, { childList: true, subtree: true });
-  }
-
   if (recordsBody) {
-    const recordsObserver = new MutationObserver(() => queueMicrotask(ensureDeleteDayButtons));
-    recordsObserver.observe(recordsBody, { childList: true, subtree: true });
+    new MutationObserver(() => queueMicrotask(ensureDeleteDayButtons))
+      .observe(recordsBody, { childList: true, subtree: true });
     ensureDeleteDayButtons();
   }
 
