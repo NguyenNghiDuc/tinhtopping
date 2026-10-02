@@ -202,9 +202,11 @@ import { requireSupabase } from './supabase.js';
     if (!body) return;
     body.querySelectorAll('[data-employee-action="toggle"]').forEach((button) => {
       const isActive = button.dataset.active === 'true';
-      button.textContent = isActive ? 'Nghỉ làm' : 'Đi làm lại';
-      button.title = isActive ? 'Chuyển nhân viên sang trạng thái nghỉ làm' : 'Cho nhân viên đi làm lại';
-      button.setAttribute('aria-label', button.title);
+      const nextText = isActive ? 'Nghỉ làm' : 'Đi làm lại';
+      const nextTitle = isActive ? 'Chuyển nhân viên sang trạng thái nghỉ làm' : 'Cho nhân viên đi làm lại';
+      if (button.textContent !== nextText) button.textContent = nextText;
+      if (button.title !== nextTitle) button.title = nextTitle;
+      if (button.getAttribute('aria-label') !== nextTitle) button.setAttribute('aria-label', nextTitle);
     });
   }
 
@@ -263,7 +265,9 @@ import { requireSupabase } from './supabase.js';
     const body = document.querySelector('#employeesBody');
     if (body) {
       const observer = new MutationObserver(() => queueMicrotask(applyEmployeeStatusFilter));
-      observer.observe(body, { childList: true, subtree: true });
+      // Chỉ theo dõi việc app.js thay lại các hàng trong tbody.
+      // Không theo dõi subtree để tránh vòng lặp do chính việc đổi text nút tạo mutation mới.
+      observer.observe(body, { childList: true });
     }
     const search = document.querySelector('#employeeSearch');
     if (search) search.addEventListener('input', () => queueMicrotask(applyEmployeeStatusFilter));
