@@ -1,4 +1,4 @@
-const CACHE = 'tinhtopping-v7';
+const CACHE = 'tinhtopping-v8';
 const ASSETS = [
   './',
   './index.html',
@@ -16,6 +16,7 @@ const ASSETS = [
   './js/productivity.js',
   './js/convenience.js',
   './js/convenience-day-delete.js',
+  './js/auth-feature-loader.js',
   './js/advanced.js',
   './js/stats-all-employees.js',
   './js/pro-tools.js',
