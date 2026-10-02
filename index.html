@@ -32,9 +32,18 @@
         <span><strong>Sổ topping</strong><small>Quản lý ca bán</small></span>
       </a>
       <nav class="main-nav" aria-label="Điều hướng chính">
-        <button class="nav-link active" type="button" data-view="records"><span aria-hidden="true">▤</span>Bảng ca</button>
-        <button class="nav-link" type="button" data-view="statistics"><span aria-hidden="true">▥</span>Thống kê tháng</button>
-        <button class="nav-link manager-only" type="button" data-view="employees" hidden><span aria-hidden="true">♙</span>Nhân viên</button>
+        <button class="nav-link active" type="button" data-view="records">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11A2.5 2.5 0 0 1 17.5 20h-11A2.5 2.5 0 0 1 4 17.5z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+          Bảng ca
+        </button>
+        <button class="nav-link" type="button" data-view="statistics">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19h16"/><path d="M7 16V9"/><path d="M12 16V5"/><path d="M17 16v-7"/></svg>
+          Thống kê tháng
+        </button>
+        <button class="nav-link manager-only" type="button" data-view="employees" hidden>
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 19v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1"/><circle cx="10" cy="7" r="3"/><path d="M20 19v-1a4 4 0 0 0-3-3.87"/><path d="M16 4.13a4 4 0 0 1 0 7.75"/></svg>
+          Nhân viên
+        </button>
       </nav>
       <div class="sidebar-foot"><span class="status-dot"></span><span id="signedInLabel">Đang đăng nhập</span></div>
     </aside>
@@ -42,7 +51,7 @@
     <main class="main-content">
       <header class="page-header">
         <div><p class="eyebrow" id="pageEyebrow">SỔ BÁN HÀNG · THEO DÕI TỪNG CA</p><h1 id="pageTitle">Bảng ca bán</h1></div>
-        <div class="header-actions"><div class="header-date" id="todayLabel"></div><button class="button button-quiet" id="signOutButton" type="button">Đăng xuất</button></div>
+        <div class="header-actions"><div class="header-date" id="todayLabel"><svg class="mini-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3v2M17 3v2M4 8h16"/><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M9 12h.01M12 12h.01M15 12h.01M9 16h.01M12 16h.01"/></svg><span></span></div><button class="button button-quiet" id="signOutButton" type="button"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>Đăng xuất</button></div>
       </header>
 
       <section class="view active" id="view-records" aria-labelledby="recordsHeading">
@@ -51,7 +60,7 @@
           <div class="toolbar-actions">
             <label class="field-label" for="recordsMonth">Tháng</label>
             <input id="recordsMonth" type="month">
-            <button class="button button-primary" id="addShiftButton" type="button"><span aria-hidden="true">＋</span>Nhập topping</button>
+            <button class="button button-primary" id="addShiftButton" type="button"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nhập topping</button>
           </div>
         </div>
 
@@ -75,7 +84,7 @@
         <section class="panel editor-panel" id="shiftEditor" hidden aria-labelledby="editorHeading">
           <div class="editor-heading">
             <div><p class="eyebrow">CHI TIẾT CA BÁN</p><h2 id="editorHeading">Nhập topping</h2></div>
-            <button class="icon-button" id="closeEditorButton" type="button" aria-label="Đóng chi tiết">×</button>
+            <button class="icon-button" id="closeEditorButton" type="button" aria-label="Đóng chi tiết"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
           </div>
           <form id="shiftForm">
             <div class="record-fields">
@@ -85,11 +94,11 @@
                 <button class="shift-option" type="button" data-shift="afternoon">Chiều</button>
                 <button class="shift-option" type="button" data-shift="evening">Tối</button>
               </div><select id="shiftName" name="shift" hidden required><option value="morning">Ca Sáng</option><option value="afternoon">Ca Chiều</option><option value="evening">Ca Tối</option></select></div>
-              <div class="form-field employee-field"><label for="employeeId">Nhân viên đứng ca</label><div class="field-combo"><select id="employeeId" name="employeeId" required></select><button class="button button-quiet manager-only" id="quickAddEmployeeButton" type="button" hidden>＋ Thêm nhân viên</button></div></div>
+              <div class="form-field employee-field"><label for="employeeId">Nhân viên đứng ca</label><div class="field-combo"><select id="employeeId" name="employeeId" required></select><button class="button button-quiet manager-only" id="quickAddEmployeeButton" type="button" hidden><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3"/><path d="M19 8v6M16 11h6"/></svg>Thêm nhân viên</button></div></div>
             </div>
             <div class="quick-employee-form" id="quickEmployeeForm" hidden>
               <label class="form-field" for="quickEmployeeName"><span>Tên nhân viên mới</span><input id="quickEmployeeName" type="text" maxlength="60" required></label>
-              <button class="button button-primary" id="saveQuickEmployeeButton" type="button">Thêm và chọn</button>
+              <button class="button button-primary" id="saveQuickEmployeeButton" type="button"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3"/><path d="M19 8v6M16 11h6"/></svg>Thêm và chọn</button>
               <button class="button button-quiet" id="cancelQuickEmployeeButton" type="button">Hủy</button>
               <p class="form-error" id="quickEmployeeError" role="alert" hidden></p>
             </div>
@@ -98,7 +107,7 @@
             <label class="form-field note-field" for="shiftNote"><span>Ghi chú</span><textarea id="shiftNote" rows="2" maxlength="500" placeholder="Ghi chú thêm cho ca này"></textarea></label>
             <div class="editor-footer">
               <div class="calculation-total"><span><strong id="totalToppings">0</strong> topping</span><strong id="totalMoney">0đ</strong></div>
-              <div class="editor-actions"><button class="button button-quiet" id="cancelEditorButton" type="button">Hủy</button><button class="button button-primary" type="submit" id="saveShiftButton">Lưu ca</button></div>
+              <div class="editor-actions"><button class="button button-quiet" id="cancelEditorButton" type="button">Hủy</button><button class="button button-primary" type="submit" id="saveShiftButton"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l4 4L19 2"/><path d="M19 2l-8 8"/></svg>Lưu ca</button></div>
             </div>
             <p class="form-error" id="formError" role="alert" hidden></p>
           </form>
@@ -108,11 +117,11 @@
       <section class="view" id="view-employees" aria-labelledby="employeesHeading" hidden>
         <div class="toolbar section-gap">
           <div><h2 id="employeesHeading">Quản lý nhân viên</h2><p class="muted">Thêm, tìm, đổi tên hoặc ẩn nhân viên đã nghỉ</p></div>
-          <button class="button button-primary manager-only" id="addEmployeeButton" type="button" hidden><span aria-hidden="true">＋</span>Thêm nhân viên</button>
+          <button class="button button-primary manager-only" id="addEmployeeButton" type="button" hidden><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3"/><path d="M19 8v6M16 11h6"/></svg>Thêm nhân viên</button>
         </div>
         <form class="employee-editor panel" id="employeeForm" hidden>
           <label class="form-field" for="employeeFormName"><span id="employeeFormLabel">Tên nhân viên</span><input id="employeeFormName" maxlength="60" required></label>
-          <div class="editor-actions"><button class="button button-quiet" id="cancelEmployeeButton" type="button">Hủy</button><button class="button button-primary" type="submit" id="saveEmployeeButton">Lưu nhân viên</button></div>
+          <div class="editor-actions"><button class="button button-quiet" id="cancelEmployeeButton" type="button">Hủy</button><button class="button button-primary" type="submit" id="saveEmployeeButton"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l4 4L19 2"/><path d="M19 2l-8 8"/></svg>Lưu nhân viên</button></div>
           <p class="form-error" id="employeeFormError" role="alert" hidden></p>
         </form>
         <section class="panel employee-panel">
