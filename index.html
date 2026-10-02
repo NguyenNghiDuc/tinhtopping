@@ -8,7 +8,9 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
   <link rel="stylesheet" href="./public/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
   <script type="module" src="./js/app.js"></script>
 </head>
 <body>
@@ -67,7 +69,7 @@
         <div class="overview-grid" id="monthOverview" aria-live="polite"></div>
 
         <section class="daily-summary-panel" aria-labelledby="dailySummaryHeading">
-          <div class="toolbar daily-summary-header"><div><h2 id="dailySummaryHeading">Tổng kết ngày</h2><p class="muted">Doanh thu của từng ca và tổng cả ngày</p></div><label class="field-label" for="summaryDate">Ngày <input id="summaryDate" type="date"></label></div>
+          <div class="toolbar daily-summary-header"><div><h2 id="dailySummaryHeading">Tổng kết ngày</h2><p class="muted">Doanh thu của từng ca và tổng cả ngày</p></div><label class="field-label" for="summaryDate">Ngày <input id="summaryDate" class="date-picker" type="text" inputmode="numeric" placeholder="dd/mm/yyyy"></label></div>
           <div class="daily-summary-list" id="dailySummary" aria-live="polite"></div>
         </section>
 
@@ -86,9 +88,9 @@
             <div><p class="eyebrow">CHI TIẾT CA BÁN</p><h2 id="editorHeading">Nhập topping</h2></div>
             <button class="icon-button" id="closeEditorButton" type="button" aria-label="Đóng chi tiết"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
           </div>
-          <form id="shiftForm">
+          <form id="shiftForm" novalidate>
             <div class="record-fields">
-              <label class="form-field"><span>Ngày</span><input id="shiftDate" name="date" type="date" required></label>
+              <label class="form-field"><span>Ngày</span><input id="shiftDate" class="date-picker" name="date" type="text" inputmode="numeric" placeholder="dd/mm/yyyy" required></label>
               <div class="form-field shift-field"><span>Ca</span><div class="shift-toggle" role="group" aria-label="Chọn ca">
                 <button class="shift-option active" type="button" data-shift="morning">Sáng</button>
                 <button class="shift-option" type="button" data-shift="afternoon">Chiều</button>
@@ -97,7 +99,7 @@
               <div class="form-field employee-field"><label for="employeeId">Nhân viên đứng ca</label><div class="field-combo"><select id="employeeId" name="employeeId" required></select><button class="button button-quiet manager-only" id="quickAddEmployeeButton" type="button" hidden><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3"/><path d="M19 8v6M16 11h6"/></svg>Thêm nhân viên</button></div></div>
             </div>
             <div class="quick-employee-form" id="quickEmployeeForm" hidden>
-              <label class="form-field" for="quickEmployeeName"><span>Tên nhân viên mới</span><input id="quickEmployeeName" type="text" maxlength="60" required></label>
+              <label class="form-field" for="quickEmployeeName"><span>Tên nhân viên mới</span><input id="quickEmployeeName" type="text" maxlength="60"></label>
               <button class="button button-primary" id="saveQuickEmployeeButton" type="button"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3"/><path d="M19 8v6M16 11h6"/></svg>Thêm và chọn</button>
               <button class="button button-quiet" id="cancelQuickEmployeeButton" type="button">Hủy</button>
               <p class="form-error" id="quickEmployeeError" role="alert" hidden></p>
@@ -145,7 +147,7 @@
         <section class="stats-detail-grid">
           <section class="panel stats-panel">
             <div class="panel-title"><div><h3>Thống kê topping</h3><p class="muted">Sản lượng và doanh thu theo từng loại</p></div><div class="segmented-control" role="group" aria-label="Kỳ thống kê topping"><button class="segment active" type="button" data-topping-period="month">Tháng</button><button class="segment" type="button" data-topping-period="day">Ngày</button></div></div>
-            <div class="stats-period"><label for="toppingMonth">Tháng</label><input id="toppingMonth" type="month"><label for="toppingDate" hidden>Ngày</label><input id="toppingDate" type="date" hidden></div>
+            <div class="stats-period"><label for="toppingMonth">Tháng</label><input id="toppingMonth" type="month"><label for="toppingDate" hidden>Ngày</label><input id="toppingDate" class="date-picker" type="text" inputmode="numeric" placeholder="dd/mm/yyyy" hidden></div>
             <div class="table-scroll"><table class="data-table compact-table"><thead><tr><th>Loại topping</th><th class="numeric">Số lượng</th><th class="numeric">Doanh thu</th></tr></thead><tbody id="toppingStatsBody"></tbody></table></div>
           </section>
           <section class="panel best-seller-panel"><p class="eyebrow">BÁN CHẠY NHẤT</p><h3 id="bestSellerName">Chưa có dữ liệu</h3><p class="best-seller-count" id="bestSellerCount">0 topping</p><div class="best-seller-rule"></div><p class="muted">Tính theo kỳ đang chọn</p></section>

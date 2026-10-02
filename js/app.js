@@ -138,6 +138,7 @@ async function renderToppingStatistics() {
     $('#bestSellerCount').textContent = `${formatNumber(bestSeller?.quantity || 0)} topping`;
     $('#toppingStatsBody').innerHTML = `${toppingTotals.map((topping) => `<tr><td>${escapeHtml(topping.name)}</td><td class="numeric">${formatNumber(topping.quantity)}</td><td class="numeric">${formatMoney(topping.revenue)}</td></tr>`).join('')}<tr><td><strong>Tổng cộng</strong></td><td class="numeric"><strong>${formatNumber(totalToppings)}</strong></td><td class="numeric row-total"><strong>${formatMoney(totalMoney)}</strong></td></tr>`;
   } catch (error) {
+    console.error('Không tải được thống kê topping từ Supabase.', error);
     showToast(readableError(error));
   }
 }
@@ -239,6 +240,7 @@ async function refreshMonthRecords(month = $('#recordsMonth').value) {
     records = await getSalesForMonth(month);
     renderRecords();
   } catch (error) {
+    console.error('Không tải được danh sách ca từ Supabase.', { month, error });
     showToast(readableError(error));
   }
 }
@@ -248,6 +250,7 @@ async function refreshDayRecords(date = $('#summaryDate').value) {
     dayRecords = await getSalesForDate(date);
     renderDailySummary();
   } catch (error) {
+    console.error('Không tải được tổng kết ngày từ Supabase.', { date, error });
     showToast(readableError(error));
   }
 }
@@ -257,6 +260,7 @@ async function refreshStatisticsRecords(month = $('#statisticsMonth').value) {
     statisticsRecords = await getSalesForMonth(month);
     renderEmployeeStatistics();
   } catch (error) {
+    console.error('Không tải được thống kê tháng từ Supabase.', { month, error });
     showToast(readableError(error));
   }
 }
@@ -314,6 +318,7 @@ async function refreshAfterSalesChange(date) {
 
 async function saveShift(event) {
   event.preventDefault();
+  const wasEditing = Boolean(editingId);
   const saveButton = $('#saveShiftButton');
   saveButton.disabled = true;
   saveButton.textContent = 'Đang lưu...';
@@ -321,34 +326,56 @@ async function saveShift(event) {
   const shift = $('#shiftName').value;
   const duplicate = records.find((record) => record.date === date && record.shift === shift && record.id !== editingId);
   const employeeId = $('#employeeId').value;
-  if (!date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     saveButton.disabled = false;
-    saveButton.textContent = editingId ? 'Lưu thay đổi' : 'Lưu ca';
-    return showFormError('Vui lòng chọn ngày bán.');
+    saveButton.textContent = wasEditing ? 'Lưu thay đổi' : 'Lưu ca';
+    return showFormError('Vui lòng chọn ngày hợp lệ.');
+  }
+  if (!SHIFTS.some((item) => item.id === shift)) {
+    saveButton.disabled = false;
+    saveButton.textContent = wasEditing ? 'Lưu thay đổi' : 'Lưu ca';
+    return showFormError('Vui lòng chọn ca Sáng, Chiều hoặc Tối.');
   }
   if (!employeeId) {
     saveButton.disabled = false;
-    saveButton.textContent = editingId ? 'Lưu thay đổi' : 'Lưu ca';
+    saveButton.textContent = wasEditing ? 'Lưu thay đổi' : 'Lưu ca';
     return showFormError('Vui lòng chọn nhân viên đứng ca.');
   }
   if (duplicate) {
     saveButton.disabled = false;
-    saveButton.textContent = editingId ? 'Lưu thay đổi' : 'Lưu ca';
+    saveButton.textContent = wasEditing ? 'Lưu thay đổi' : 'Lưu ca';
     return showFormError(`Ngày này đã có ${shiftLabel(shift)}. Hãy sửa ca đã ghi nhận trong bảng.`);
   }
 
   const record = { date, shift, employeeId, quantities: readQuantities(), note: $('#shiftNote').value.trim() };
   try {
-    if (editingId) await updateSalesRecord(editingId, record);
+    if (wasEditing) await updateSalesRecord(editingId, record);
     else await createSalesRecord(record);
-    closeEditor();
-    await refreshAfterSalesChange(date);
-    showToast(editingId ? 'Đã cập nhật ca bán.' : 'Đã lưu ca bán.');
   } catch (error) {
+    console.error('Lỗi khi lưu ca bán lên Supabase.', {
+      error,
+      date,
+      shift,
+      employeeId,
+      quantities: record.quantities,
+      note: record.note
+    });
     showFormError(readableError(error));
+    saveButton.disabled = false;
+    saveButton.textContent = wasEditing ? 'Lưu thay đổi' : 'Lưu ca';
+    return;
+  }
+
+  closeEditor();
+  showToast(wasEditing ? 'Đã cập nhật ca bán.' : 'Đã lưu ca bán.');
+  try {
+    await refreshAfterSalesChange(date);
+  } catch (error) {
+    console.error('Đã lưu ca nhưng không thể làm mới dữ liệu hiển thị.', error);
+    showToast(`Đã lưu ca nhưng chưa tải lại được dữ liệu: ${readableError(error)}`);
   } finally {
     saveButton.disabled = false;
-    saveButton.textContent = editingId ? 'Lưu thay đổi' : 'Lưu ca';
+    saveButton.textContent = wasEditing ? 'Lưu thay đổi' : 'Lưu ca';
   }
 }
 
@@ -459,12 +486,28 @@ function readableError(error) {
   if (error?.code === '23505') return 'Tên nhân viên hoặc ngày/ca này đã tồn tại.';
   if (error?.code === 'PGRST205' || error?.code === '42P01') return 'Database chưa có bảng cần thiết. Hãy chạy supabase/schema.sql trong Supabase SQL Editor.';
   if (error?.code === 'PGRST202') return 'Database chưa có hàm lưu ca. Hãy chạy lại supabase/schema.sql trong Supabase SQL Editor.';
-  if (error?.code === 'PGRST116') return 'Chưa tìm thấy hồ sơ vai trò cho tài khoản. Chạy schema SQL rồi tạo lại tài khoản sau khi trigger đã được cài.';
+  if (error?.code === 'PGRST116') return 'Đăng nhập Supabase thành công nhưng tài khoản chưa có hồ sơ vai trò trong public.user_profiles. Không cần tạo lại tài khoản; quản lý cần thêm hồ sơ staff hoặc manager cho user này.';
   if (error?.code === '42501') return 'Tài khoản không có quyền thao tác này. Kiểm tra role và RLS policies.';
   if (error?.message?.includes('Invalid login credentials')) return 'Email hoặc mật khẩu không đúng.';
+  if (error?.message?.toLowerCase().includes('email not confirmed')) return 'Email tài khoản chưa được xác nhận. Hãy xác nhận email trong Supabase Authentication hoặc tắt yêu cầu xác nhận email nếu phù hợp.';
+  if (error?.message?.toLowerCase().includes('too many requests')) return 'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng chờ một lúc rồi thử lại.';
   if (error?.message?.includes('Invalid API key')) return 'Supabase public key không hợp lệ hoặc không thuộc project URL đã cấu hình.';
   if (error?.message?.includes('Failed to fetch')) return 'Không kết nối được Supabase. Kiểm tra URL và kết nối mạng.';
-  return error?.message || 'Có lỗi khi lưu dữ liệu. Vui lòng thử lại.';
+  const details = [error?.message, error?.details, error?.hint, error?.code ? `Mã: ${error.code}` : '']
+    .filter(Boolean)
+    .join(' · ');
+  return details || 'Có lỗi khi lưu dữ liệu. Vui lòng thử lại.';
+}
+
+function readableSignInError(error) {
+  const message = error?.message?.toLowerCase() || '';
+  if (message.includes('invalid login credentials')) return 'Email hoặc mật khẩu không đúng. Hãy kiểm tra lại thông tin đăng nhập.';
+  if (message.includes('email not confirmed')) return 'Email tài khoản chưa được xác nhận. Hãy xác nhận email trong Supabase Authentication hoặc tắt yêu cầu xác nhận email nếu phù hợp.';
+  if (message.includes('too many requests')) return 'Bạn đã thử đăng nhập quá nhiều lần. Vui lòng chờ một lúc rồi thử lại.';
+  if (message.includes('invalid api key')) return 'Supabase từ chối public key. Hãy kiểm tra lại URL và publishable key trong js/config.js.';
+  if (message.includes('failed to fetch')) return 'Không kết nối được Supabase. Hãy kiểm tra mạng và thử lại.';
+  const errorCode = error?.code || error?.status;
+  return `Không thể đăng nhập vào Supabase${errorCode ? ` (mã ${errorCode})` : ''}. Hãy kiểm tra thông tin đăng nhập; chi tiết kỹ thuật đã được ghi trong Console.`;
 }
 
 function showAuthMessage(message) {
@@ -495,6 +538,7 @@ async function activateSession(user) {
       renderToppingStatistics()
     ]);
   } catch (error) {
+    console.error('Supabase đã xác thực người dùng nhưng không thể khởi tạo ứng dụng.', error);
     currentUser = null;
     $('#application').hidden = true;
     $('#authGate').hidden = false;
@@ -510,7 +554,8 @@ async function handleSignIn(event) {
     const { user } = await signIn($('#authEmail').value.trim(), $('#authPassword').value);
     await activateSession(user);
   } catch (error) {
-    showAuthMessage(readableError(error));
+    console.error('Supabase signInWithPassword thất bại.', error);
+    showAuthMessage(readableSignInError(error));
   } finally {
     $('#signInButton').disabled = false;
   }
@@ -525,6 +570,7 @@ async function loadInitialSession() {
     const { session } = await getSession();
     if (session) await activateSession(session.user);
   } catch (error) {
+    console.error('Không thể khôi phục phiên Supabase.', error);
     showAuthMessage(readableError(error));
   }
 }
@@ -576,6 +622,7 @@ function initialize() {
   $('#statisticsMonth').value = month;
   $('#toppingMonth').value = month;
   $('#toppingDate').value = today;
+  initializeDatePickers();
   $$('.shift-option').forEach((button) => button.addEventListener('click', () => {
     $('#shiftName').value = button.dataset.shift;
     syncShiftButtons();
@@ -635,6 +682,78 @@ function initialize() {
   $('#toppingMonth').addEventListener('change', renderToppingStatistics);
   $('#toppingDate').addEventListener('change', renderToppingStatistics);
   void loadInitialSession();
+}
+
+function initializeDatePickers() {
+  if (!window.flatpickr) return;
+
+  const vietnameseLocale = window.flatpickr.l10ns?.vn || {
+    weekdays: {
+      shorthand: ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'],
+      longhand: ['Chủ nhật', 'Thứ hai', 'Thứ ba', 'Thứ tư', 'Thứ năm', 'Thứ sáu', 'Thứ bảy']
+    },
+    months: {
+      shorthand: ['Thg 1', 'Thg 2', 'Thg 3', 'Thg 4', 'Thg 5', 'Thg 6', 'Thg 7', 'Thg 8', 'Thg 9', 'Thg 10', 'Thg 11', 'Thg 12'],
+      longhand: ['Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4', 'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8', 'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12']
+    },
+    firstDayOfWeek: 1,
+    rangeSeparator: ' đến ',
+    scrollTitle: 'Cuộn để chọn tháng',
+    toggleTitle: 'Bật/tắt lịch'
+  };
+
+  $$('.date-picker').forEach((element) => {
+    const existingValue = element.value;
+    const pickerResult = window.flatpickr(element, {
+      locale: vietnameseLocale,
+      altInput: true,
+      altFormat: 'd/m/Y',
+      dateFormat: 'Y-m-d',
+      weekStart: 1,
+      allowInput: false,
+      defaultDate: existingValue || undefined,
+      monthSelectorType: 'static',
+      onReady: (_selectedDates, _dateString, picker) => {
+        const calendar = picker.calendarContainer;
+        if (calendar && !calendar.querySelector('.flatpickr-actions')) {
+          const actions = document.createElement('div');
+          actions.className = 'flatpickr-actions';
+
+          const todayButton = document.createElement('button');
+          todayButton.type = 'button';
+          todayButton.className = 'flatpickr-action-btn';
+          todayButton.textContent = 'Hôm nay';
+          todayButton.addEventListener('click', () => {
+            picker.setDate(new Date(), false);
+            picker.close();
+          });
+
+          const clearButton = document.createElement('button');
+          clearButton.type = 'button';
+          clearButton.className = 'flatpickr-action-btn flatpickr-action-btn-muted';
+          clearButton.textContent = 'Xóa';
+          clearButton.addEventListener('click', () => {
+            picker.clear();
+            picker.close();
+          });
+
+          actions.appendChild(todayButton);
+          actions.appendChild(clearButton);
+          calendar.appendChild(actions);
+        }
+
+        const altInput = element.parentElement?.querySelector('.flatpickr-input') || element;
+        if (altInput && altInput !== element) {
+          altInput.setAttribute('aria-label', 'Chọn ngày');
+        }
+      }
+    });
+    const instance = Array.isArray(pickerResult) ? pickerResult[0] : pickerResult;
+
+    if (typeof instance?.setDate === 'function' && existingValue) {
+      instance.setDate(existingValue, false);
+    }
+  });
 }
 
 initialize();
