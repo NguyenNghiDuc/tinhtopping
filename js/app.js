@@ -243,7 +243,7 @@ function renderBatchColumn(shiftId) {
   const employeeRows = rows.map((row, index) => `
     <div class="batch-employee-row" data-batch-shift="${shiftId}" data-batch-index="${index}">
       <span class="batch-employee-name" title="${escapeHtml(row.employee)}">${escapeHtml(row.employee)}</span>
-      <div class="batch-quantity-field"><input type="number" min="0" step="1" inputmode="numeric" value="${escapeHtml(String(row.quantity))}" aria-label="Số topping của ${escapeHtml(row.employee)} trong ${escapeHtml(shift.label)}" data-batch-shift="${shiftId}" data-batch-quantity><span data-batch-money>${formatMoney(rowQuantity(row) * 1000)}</span></div>
+      <div class="batch-quantity-field"><input type="text" inputmode="numeric" autocomplete="off" value="${escapeHtml(String(row.quantity ?? 0))}" aria-label="Số topping của ${escapeHtml(row.employee)} trong ${escapeHtml(shift.label)}" data-batch-shift="${shiftId}" data-batch-quantity><span data-batch-money>${formatMoney(rowQuantity(row) * 1000)}</span></div>
       <button class="batch-remove-button" type="button" data-batch-action="remove" data-shift="${shiftId}" data-index="${index}" aria-label="Xóa ${escapeHtml(row.employee)} khỏi ${escapeHtml(shift.label)}" title="Bỏ nhân viên khỏi ca"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3"/></svg></button>
     </div>`).join('');
   const totals = calculateShiftTotals(rows.map(rowQuantity), toppingTypes);
@@ -253,7 +253,7 @@ function renderBatchColumn(shiftId) {
   column.innerHTML = `<article class="batch-shift-card ${style.className}">
     <header class="batch-shift-heading">${style.icon}<h3>CA ${escapeHtml(shift.label.replace('Ca ', '')).toLocaleUpperCase('vi')}</h3></header>
     <div class="batch-roster-heading"><span>Nhân viên</span><span>Số topping / tiền</span><span class="visually-hidden">Thao tác</span></div>
-    <div class="batch-employee-list">${employeeRows || '<p class="batch-no-employees">Chưa có nhân viên đang hoạt động.</p>'}</div>
+    <div class="batch-employee-list">${employeeRows || '<p class="batch-no-employees">Chưa chọn nhân viên cho ca này.</p>'}</div>
     <div class="batch-add-controls">
       <select aria-label="Chọn nhân viên thêm vào ${escapeHtml(shift.label)}" data-batch-add-select="${shiftId}" ${availableEmployees.length ? '' : 'disabled'}><option value="">+ Thêm nhân viên</option>${availableEmployees.map((employee) => `<option value="${escapeHtml(employee.id)}">${escapeHtml(employee.name)}</option>`).join('')}</select>
       <button class="batch-add-all" type="button" data-batch-action="add-all" data-shift="${shiftId}" ${availableEmployees.length ? '' : 'disabled'}>+ Thêm tất cả nhân viên</button>
@@ -307,10 +307,6 @@ function initializeBatchRows(dayRecords) {
       originalQuantities: [...record.quantities],
       originalQuantity: record.quantities.reduce((total, quantity) => total + normalizeQuantity(quantity), 0)
     }));
-    const existingEmployeeIds = new Set(rows.map((row) => row.employeeId));
-    employees.filter((employee) => employee.active && !existingEmployeeIds.has(employee.id)).forEach((employee) => {
-      rows.push({ id: null, employeeId: employee.id, employee: employee.name, quantity: 0, originalQuantities: [], originalQuantity: 0 });
-    });
     return [shift.id, rows];
   }));
 }
@@ -419,6 +415,17 @@ function handleBatchInput(event) {
 
   const input = event.target.closest('[data-batch-quantity]');
   if (!input) return;
+
+  const caret = input.selectionStart ?? input.value.length;
+  const before = input.value;
+  const left = before.slice(0, caret);
+  const cleaned = before.replace(/\D/g, '');
+  if (cleaned !== before) {
+    input.value = cleaned;
+    const nextCaret = left.replace(/\D/g, '').length;
+    try { input.setSelectionRange(nextCaret, nextCaret); } catch {}
+  }
+
   const rowElement = input.closest('[data-batch-index]');
   const shiftId = input.dataset.batchShift || rowElement?.dataset.batchShift;
   const rowIndex = Number(rowElement?.dataset.batchIndex ?? -1);
@@ -426,6 +433,26 @@ function handleBatchInput(event) {
   if (!row) return;
   row.quantity = input.value;
   batchDirty = true;
+  updateBatchTotals();
+}
+
+function handleBatchFocusIn(event) {
+  const input = event.target.closest('[data-batch-quantity]');
+  if (!input || input.value !== '0') return;
+  requestAnimationFrame(() => {
+    if (document.activeElement === input && input.value === '0') input.select();
+  });
+}
+
+function handleBatchFocusOut(event) {
+  const input = event.target.closest('[data-batch-quantity]');
+  if (!input || input.value !== '') return;
+  input.value = '0';
+  const rowElement = input.closest('[data-batch-index]');
+  const shiftId = input.dataset.batchShift || rowElement?.dataset.batchShift;
+  const rowIndex = Number(rowElement?.dataset.batchIndex ?? -1);
+  const row = shiftId && batchRowsByShift[shiftId]?.[rowIndex];
+  if (row) row.quantity = 0;
   updateBatchTotals();
 }
 
@@ -923,6 +950,8 @@ function initialize() {
     shiftBatchColumns.addEventListener('click', handleBatchColumnAction);
     shiftBatchColumns.addEventListener('input', handleBatchInput);
     shiftBatchColumns.addEventListener('change', handleBatchEmployeeSelect);
+    shiftBatchColumns.addEventListener('focusin', handleBatchFocusIn);
+    shiftBatchColumns.addEventListener('focusout', handleBatchFocusOut);
   }
   const quickAddEmployeeButton = $('#quickAddEmployeeButton');
   if (quickAddEmployeeButton) quickAddEmployeeButton.addEventListener('click', () => {
