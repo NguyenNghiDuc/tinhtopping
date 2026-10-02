@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f5f6ef">
+  <title>Sổ topping | Quản lý ca bán</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./public/css/style.css">
+  <script type="module" src="./js/app.js"></script>
+</head>
+<body>
+  <section class="auth-gate" id="authGate" aria-labelledby="authHeading">
+    <form class="auth-panel" id="signInForm">
+      <span class="brand-mark">T</span>
+      <p class="eyebrow">SỔ BÁN HÀNG</p>
+      <h1 id="authHeading">Đăng nhập</h1>
+      <p class="muted">Đăng nhập để quản lý ca bán và nhân viên.</p>
+      <label class="form-field" for="authEmail"><span>Email</span><input id="authEmail" type="email" autocomplete="username" required></label>
+      <label class="form-field" for="authPassword"><span>Mật khẩu</span><input id="authPassword" type="password" autocomplete="current-password" required></label>
+      <button class="button button-primary" type="submit" id="signInButton">Đăng nhập</button>
+      <p class="auth-message" id="authMessage" role="alert"></p>
+    </form>
+  </section>
+
+  <div class="app-shell" id="application" hidden>
+    <aside class="sidebar">
+      <a class="brand" href="#records" aria-label="Sổ topping, trang bảng ca">
+        <span class="brand-mark">T</span>
+        <span><strong>Sổ topping</strong><small>Quản lý ca bán</small></span>
+      </a>
+      <nav class="main-nav" aria-label="Điều hướng chính">
+        <button class="nav-link active" type="button" data-view="records"><span aria-hidden="true">▤</span>Bảng ca</button>
+        <button class="nav-link" type="button" data-view="statistics"><span aria-hidden="true">▥</span>Thống kê tháng</button>
+        <button class="nav-link manager-only" type="button" data-view="employees" hidden><span aria-hidden="true">♙</span>Nhân viên</button>
+      </nav>
+      <div class="sidebar-foot"><span class="status-dot"></span><span id="signedInLabel">Đang đăng nhập</span></div>
+    </aside>
+
+    <main class="main-content">
+      <header class="page-header">
+        <div><p class="eyebrow" id="pageEyebrow">SỔ BÁN HÀNG · THEO DÕI TỪNG CA</p><h1 id="pageTitle">Bảng ca bán</h1></div>
+        <div class="header-actions"><div class="header-date" id="todayLabel"></div><button class="button button-quiet" id="signOutButton" type="button">Đăng xuất</button></div>
+      </header>
+
+      <section class="view active" id="view-records" aria-labelledby="recordsHeading">
+        <div class="toolbar section-gap">
+          <div><h2 id="recordsHeading">Bảng chính</h2><p class="muted">Mỗi dòng là một ca bán hàng</p></div>
+          <div class="toolbar-actions">
+            <label class="field-label" for="recordsMonth">Tháng</label>
+            <input id="recordsMonth" type="month">
+            <button class="button button-primary" id="addShiftButton" type="button"><span aria-hidden="true">＋</span>Nhập topping</button>
+          </div>
+        </div>
+
+        <div class="overview-grid" id="monthOverview" aria-live="polite"></div>
+
+        <section class="daily-summary-panel" aria-labelledby="dailySummaryHeading">
+          <div class="toolbar daily-summary-header"><div><h2 id="dailySummaryHeading">Tổng kết ngày</h2><p class="muted">Doanh thu của từng ca và tổng cả ngày</p></div><label class="field-label" for="summaryDate">Ngày <input id="summaryDate" type="date"></label></div>
+          <div class="daily-summary-list" id="dailySummary" aria-live="polite"></div>
+        </section>
+
+        <section class="panel table-panel" aria-label="Các ca bán trong tháng">
+          <div class="table-scroll">
+            <table class="data-table">
+              <thead><tr><th>Ngày</th><th>Ca</th><th>Nhân viên đứng ca</th><th class="numeric">Tổng topping</th><th class="numeric">Tổng tiền topping</th><th><span class="visually-hidden">Thao tác</span></th></tr></thead>
+              <tbody id="recordsBody"></tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="recordsEmpty" hidden>Chưa có ca bán trong tháng này. Bấm “Nhập topping” để bắt đầu.</div>
+        </section>
+
+        <section class="panel editor-panel" id="shiftEditor" hidden aria-labelledby="editorHeading">
+          <div class="editor-heading">
+            <div><p class="eyebrow">CHI TIẾT CA BÁN</p><h2 id="editorHeading">Nhập topping</h2></div>
+            <button class="icon-button" id="closeEditorButton" type="button" aria-label="Đóng chi tiết">×</button>
+          </div>
+          <form id="shiftForm">
+            <div class="record-fields">
+              <label class="form-field"><span>Ngày</span><input id="shiftDate" name="date" type="date" required></label>
+              <label class="form-field"><span>Ca</span><select id="shiftName" name="shift" required><option value="morning">Ca Sáng</option><option value="afternoon">Ca Chiều</option><option value="evening">Ca Tối</option></select></label>
+              <div class="form-field employee-field"><label for="employeeId">Nhân viên đứng ca</label><div class="field-combo"><select id="employeeId" name="employeeId" required></select><button class="button button-quiet manager-only" id="quickAddEmployeeButton" type="button" hidden>＋ Thêm nhân viên</button></div></div>
+            </div>
+            <div class="quick-employee-form" id="quickEmployeeForm" hidden>
+              <label class="form-field" for="quickEmployeeName"><span>Tên nhân viên mới</span><input id="quickEmployeeName" type="text" maxlength="60" required></label>
+              <button class="button button-primary" id="saveQuickEmployeeButton" type="button">Thêm và chọn</button>
+              <button class="button button-quiet" id="cancelQuickEmployeeButton" type="button">Hủy</button>
+              <p class="form-error" id="quickEmployeeError" role="alert" hidden></p>
+            </div>
+            <div class="topping-section-heading"><div><h3>Số lượng topping</h3><p class="muted">Nhập số lượng đã bán; tiền tự tính theo đơn giá 1.000đ.</p></div></div>
+            <div class="topping-grid" id="toppingInputs"></div>
+            <label class="form-field note-field" for="shiftNote"><span>Ghi chú</span><textarea id="shiftNote" rows="2" maxlength="500" placeholder="Ghi chú thêm cho ca này"></textarea></label>
+            <div class="editor-footer">
+              <div class="calculation-total"><span><strong id="totalToppings">0</strong> topping</span><strong id="totalMoney">0đ</strong></div>
+              <div class="editor-actions"><button class="button button-quiet" id="cancelEditorButton" type="button">Hủy</button><button class="button button-primary" type="submit" id="saveShiftButton">Lưu ca</button></div>
+            </div>
+            <p class="form-error" id="formError" role="alert" hidden></p>
+          </form>
+        </section>
+      </section>
+
+      <section class="view" id="view-employees" aria-labelledby="employeesHeading" hidden>
+        <div class="toolbar section-gap">
+          <div><h2 id="employeesHeading">Quản lý nhân viên</h2><p class="muted">Thêm, tìm, đổi tên hoặc ẩn nhân viên đã nghỉ</p></div>
+          <button class="button button-primary manager-only" id="addEmployeeButton" type="button" hidden><span aria-hidden="true">＋</span>Thêm nhân viên</button>
+        </div>
+        <form class="employee-editor panel" id="employeeForm" hidden>
+          <label class="form-field" for="employeeFormName"><span id="employeeFormLabel">Tên nhân viên</span><input id="employeeFormName" maxlength="60" required></label>
+          <div class="editor-actions"><button class="button button-quiet" id="cancelEmployeeButton" type="button">Hủy</button><button class="button button-primary" type="submit" id="saveEmployeeButton">Lưu nhân viên</button></div>
+          <p class="form-error" id="employeeFormError" role="alert" hidden></p>
+        </form>
+        <section class="panel employee-panel">
+          <div class="employee-toolbar"><label class="search-field" for="employeeSearch"><span aria-hidden="true">⌕</span><input id="employeeSearch" type="search" placeholder="Tìm nhân viên theo tên"></label><label class="inactive-toggle"><input id="showInactiveEmployees" type="checkbox"> Hiện nhân viên đã nghỉ</label></div>
+          <div class="table-scroll"><table class="data-table"><thead><tr><th>Tên nhân viên</th><th>Trạng thái</th><th>Ngày thêm</th><th><span class="visually-hidden">Thao tác</span></th></tr></thead><tbody id="employeesBody"></tbody></table></div>
+          <div class="empty-state" id="employeesEmpty" hidden>Không tìm thấy nhân viên.</div>
+        </section>
+      </section>
+
+      <section class="view" id="view-statistics" aria-labelledby="statisticsHeading" hidden>
+        <div class="toolbar section-gap">
+          <div><h2 id="statisticsHeading">Thống kê tháng</h2><p class="muted">Tổng hợp số ca và doanh thu theo nhân viên</p></div>
+          <label class="toolbar-actions field-label" for="statisticsMonth">Tháng <input id="statisticsMonth" type="month"></label>
+        </div>
+        <div class="overview-grid" id="statisticsOverview"></div>
+        <section class="panel stats-panel">
+          <div class="panel-title"><div><h3>Hiệu quả theo nhân viên</h3><p class="muted">Số ca đã đứng và tổng bán trong tháng</p></div></div>
+          <div class="table-scroll"><table class="data-table"><thead><tr><th>Nhân viên</th><th class="numeric">Số ca</th><th class="numeric">Tổng topping</th><th class="numeric">Tổng tiền topping</th></tr></thead><tbody id="employeeStatsBody"></tbody></table></div>
+          <div class="empty-state" id="employeeStatsEmpty" hidden>Chưa có dữ liệu nhân viên trong tháng này.</div>
+        </section>
+        <section class="stats-detail-grid">
+          <section class="panel stats-panel">
+            <div class="panel-title"><div><h3>Thống kê topping</h3><p class="muted">Sản lượng và doanh thu theo từng loại</p></div><div class="segmented-control" role="group" aria-label="Kỳ thống kê topping"><button class="segment active" type="button" data-topping-period="month">Tháng</button><button class="segment" type="button" data-topping-period="day">Ngày</button></div></div>
+            <div class="stats-period"><label for="toppingMonth">Tháng</label><input id="toppingMonth" type="month"><label for="toppingDate" hidden>Ngày</label><input id="toppingDate" type="date" hidden></div>
+            <div class="table-scroll"><table class="data-table compact-table"><thead><tr><th>Loại topping</th><th class="numeric">Số lượng</th><th class="numeric">Doanh thu</th></tr></thead><tbody id="toppingStatsBody"></tbody></table></div>
+          </section>
+          <section class="panel best-seller-panel"><p class="eyebrow">BÁN CHẠY NHẤT</p><h3 id="bestSellerName">Chưa có dữ liệu</h3><p class="best-seller-count" id="bestSellerCount">0 topping</p><div class="best-seller-rule"></div><p class="muted">Tính theo kỳ đang chọn</p></section>
+        </section>
+      </section>
+    </main>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
