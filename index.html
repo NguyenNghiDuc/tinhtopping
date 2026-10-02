@@ -86,7 +86,11 @@
           </div>
           <form id="shiftForm" novalidate>
             <label class="form-field batch-date-field"><span>Ngày</span><input id="shiftDate" class="date-picker" name="date" type="text" inputmode="numeric" placeholder="dd/mm/yyyy" required></label>
-            <div class="batch-shift-columns" id="shiftBatchColumns" aria-live="polite"></div>
+            <div class="batch-shift-columns" id="shiftBatchColumns" aria-live="polite">
+              <div id="batch-column-morning"></div>
+              <div id="batch-column-afternoon"></div>
+              <div id="batch-column-evening"></div>
+            </div>
             <div class="batch-day-total">
               <div><span class="eyebrow">TỔNG NGÀY</span><strong><span id="batchDayToppings">0</span> topping</strong></div>
               <strong id="batchDayMoney">0đ</strong>
