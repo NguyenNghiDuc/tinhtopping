@@ -1,0 +1,193 @@
+/* Bảng ca bán: card theo ngày, tách rõ Sáng / Chiều / Tối. */
+.history-panel {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.history-days {
+  display: grid;
+  gap: 18px;
+}
+
+.history-day {
+  display: grid;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+}
+
+.history-day-heading {
+  margin: 0;
+  padding: 15px 18px;
+  border-bottom: 1px solid #dbeafe;
+  color: #0f172a;
+  background: #eff6ff;
+  font: 800 16px 'Manrope', sans-serif;
+}
+
+.history-shift-list {
+  display: grid;
+  gap: 0;
+}
+
+.shift-history-card {
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid #e2e8f0;
+  border-left: 4px solid var(--shift-accent);
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
+}
+
+.shift-history-card:last-child {
+  border-bottom: 0;
+}
+
+.shift-history-card.morning { --shift-accent: #d97706; --shift-tint: #fffbeb; }
+.shift-history-card.afternoon { --shift-accent: #0284c7; --shift-tint: #f0f9ff; }
+.shift-history-card.evening { --shift-accent: #7c3aed; --shift-tint: #f5f3ff; }
+
+.shift-history-heading {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #eef2f7;
+  background: var(--shift-tint);
+}
+
+.shift-history-heading h3 {
+  margin: 0;
+  color: var(--shift-accent);
+  font: 800 12px 'Manrope', sans-serif;
+  letter-spacing: .03em;
+}
+
+.shift-history-heading svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: var(--shift-accent);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.shift-empty {
+  margin: 0;
+  padding: 15px 18px 18px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-style: italic;
+}
+
+.shift-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.shift-history-table {
+  width: 100%;
+  min-width: 720px;
+  table-layout: auto;
+}
+
+.shift-history-table th,
+.shift-history-table td {
+  padding: 11px 16px;
+  vertical-align: middle;
+}
+
+.shift-history-table th {
+  color: #64748b;
+  background: #fff;
+  font-size: 9px;
+}
+
+.shift-history-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.shift-history-table .employee-name {
+  color: #0f172a !important;
+  font-weight: 700;
+}
+
+.shift-history-table tfoot td {
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.shift-history-table td:last-child,
+.shift-history-table th:last-child {
+  width: 145px;
+}
+
+.row-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.table-action {
+  min-height: 30px;
+  padding: 5px 9px;
+  border-radius: 6px;
+}
+
+.table-action.delete {
+  border-color: #fecaca;
+  color: #b91c1c;
+  background: #fff;
+}
+
+.history-day-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0;
+  padding: 15px 18px;
+  border: 0;
+  border-top: 1px solid #bfdbfe;
+  border-left: 0;
+  border-radius: 0;
+  color: #1d4ed8;
+  background: #dbeafe;
+  font-size: 13px;
+}
+
+.history-day-total strong:first-child {
+  font: 800 12px 'Manrope', sans-serif;
+  letter-spacing: .03em;
+}
+
+.history-day-total strong:last-child {
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 620px) {
+  .history-day { border-radius: 10px; }
+  .history-day-heading { padding: 13px 14px; font-size: 14px; }
+  .shift-history-heading { padding: 9px 12px; }
+  .shift-history-table { min-width: 620px; }
+  .shift-history-table th,
+  .shift-history-table td { padding: 9px 11px; }
+  .history-day-total {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+    padding: 13px 14px;
+  }
+}
