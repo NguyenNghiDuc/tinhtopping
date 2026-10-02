@@ -6,23 +6,19 @@
     const style = document.createElement('style');
     style.id = 'quantity-selection-style';
     style.textContent = `
-      input[data-batch-quantity]::selection {
-        background: #2563eb;
-        color: #ffffff;
-      }
-      input[data-batch-quantity]::-moz-selection {
-        background: #2563eb;
-        color: #ffffff;
-      }
+      input[data-batch-quantity]::selection { background:#2563eb; color:#fff; }
+      input[data-batch-quantity]::-moz-selection { background:#2563eb; color:#fff; }
     `;
     document.head.appendChild(style);
   }
 
   function normalizeField(input) {
     if (!(input instanceof HTMLInputElement)) return;
-    if (input.dataset.quantityFixed === '5') return;
-    input.dataset.quantityFixed = '5';
+    if (input.dataset.quantityFixed === '6') return;
+    input.dataset.quantityFixed = '6';
 
+    // Keep this as a completely normal text field. Previous pointer/mouse
+    // interception made some keystrokes feel ignored on Chrome/Codespaces.
     input.type = 'text';
     input.inputMode = 'numeric';
     input.autocomplete = 'off';
@@ -31,61 +27,27 @@
     input.removeAttribute('maxlength');
     input.removeAttribute('size');
 
-    const clean = (value) => String(value ?? '').replace(/\D+/g, '');
-
-    const selectZero = () => {
-      if (input.value !== '0') return;
-      input.focus({ preventScroll: true });
-      try {
-        input.setSelectionRange(0, 1, 'forward');
-      } catch {
-        input.select();
-      }
-    };
-
-    const holdZeroSelection = (event) => {
-      if (input.value !== '0') return;
-      event.preventDefault();
-      selectZero();
-      requestAnimationFrame(selectZero);
-      setTimeout(selectZero, 0);
-    };
-
-    input.addEventListener('pointerdown', holdZeroSelection);
-    input.addEventListener('mousedown', holdZeroSelection);
-    input.addEventListener('mouseup', (event) => {
-      if (input.value !== '0') return;
-      event.preventDefault();
-      selectZero();
-    });
-    input.addEventListener('click', (event) => {
-      if (input.value !== '0') return;
-      event.preventDefault();
-      selectZero();
-    });
     input.addEventListener('focus', () => {
       if (input.value === '0') {
-        selectZero();
-        requestAnimationFrame(selectZero);
+        // Select only on focus; do not cancel pointer/mouse events.
+        setTimeout(() => {
+          if (document.activeElement === input && input.value === '0') input.select();
+        }, 0);
       }
     });
 
     input.addEventListener('input', () => {
-      input.removeAttribute('max');
-      input.removeAttribute('maxlength');
-      input.removeAttribute('pattern');
-
-      const start = input.selectionStart ?? input.value.length;
+      const caret = input.selectionStart ?? input.value.length;
       const before = input.value;
-      const cleanedBeforeCaret = before.slice(0, start).replace(/\D+/g, '');
-      const after = clean(before);
+      const left = before.slice(0, caret);
+      const after = before.replace(/\D/g, '');
 
       if (before !== after) {
+        const newCaret = left.replace(/\D/g, '').length;
         input.value = after;
-        const caret = Math.min(cleanedBeforeCaret.length, after.length);
-        try { input.setSelectionRange(caret, caret); } catch {}
+        try { input.setSelectionRange(newCaret, newCaret); } catch {}
       }
-    }, true);
+    });
 
     input.addEventListener('blur', () => {
       if (input.value === '') {
@@ -102,59 +64,35 @@
 
   function suppressDraftRestoreToast() {
     const toast = document.querySelector('#toast');
-    if (!toast) return;
-    const hideIfDraftToast = () => {
+    if (!toast || toast.dataset.draftToastGuard === '1') return;
+    toast.dataset.draftToastGuard = '1';
+    const hide = () => {
       if (/Đã khôi phục bản nháp chưa lưu trên máy/i.test(toast.textContent || '')) {
         toast.classList.remove('show');
         toast.textContent = '';
       }
     };
-    hideIfDraftToast();
-    new MutationObserver(hideIfDraftToast).observe(toast, {
-      childList: true,
-      characterData: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['class']
-    });
+    new MutationObserver(hide).observe(toast, { childList:true, characterData:true, subtree:true, attributes:true, attributeFilter:['class'] });
+    hide();
   }
 
-  // convenience.js used add-all.click() while restoring a draft. That made all
-  // employees appear even when the user only wanted to add one employee.
-  // Allow the real "+ Thêm tất cả nhân viên" button, but block synthetic clicks.
-  document.addEventListener('click', (event) => {
-    const addAll = event.target instanceof Element
-      ? event.target.closest('[data-batch-action="add-all"]')
-      : null;
-    if (!addAll || event.isTrusted) return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-  }, true);
-
   installSelectionStyle();
-  document.addEventListener('DOMContentLoaded', () => {
-    installSelectionStyle();
-    scan();
-    suppressDraftRestoreToast();
-  }, { once: true });
   scan();
   suppressDraftRestoreToast();
 
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      installSelectionStyle();
+      scan();
+      suppressDraftRestoreToast();
+    }, { once:true });
+  }
+
   new MutationObserver((mutations) => {
     for (const mutation of mutations) {
-      if (mutation.type === 'attributes' && mutation.target instanceof HTMLInputElement && mutation.target.matches(selector)) {
-        mutation.target.removeAttribute('max');
-        mutation.target.removeAttribute('maxlength');
-        mutation.target.removeAttribute('pattern');
-      }
       for (const node of mutation.addedNodes || []) {
         if (node instanceof Element) scan(node);
       }
     }
-  }).observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['max', 'maxlength', 'pattern']
-  });
+  }).observe(document.documentElement, { childList:true, subtree:true });
 })();
