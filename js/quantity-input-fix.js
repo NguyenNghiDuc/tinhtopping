@@ -51,8 +51,6 @@
       setTimeout(selectZero, 0);
     };
 
-    // For the default zero, keep it visible and highlighted. Prevent the
-    // browser from moving the caret after mouse/pointer release.
     input.addEventListener('pointerdown', holdZeroSelection);
     input.addEventListener('mousedown', holdZeroSelection);
     input.addEventListener('mouseup', (event) => {
@@ -72,8 +70,6 @@
       }
     });
 
-    // If zero is selected, the first digit naturally replaces it. For every
-    // other value, the field behaves like a normal unlimited text input.
     input.addEventListener('input', () => {
       input.removeAttribute('max');
       input.removeAttribute('maxlength');
@@ -104,12 +100,33 @@
     root.querySelectorAll?.(selector).forEach(normalizeField);
   }
 
+  function suppressDraftRestoreToast() {
+    const toast = document.querySelector('#toast');
+    if (!toast) return;
+    const hideIfDraftToast = () => {
+      if (/Đã khôi phục bản nháp chưa lưu trên máy/i.test(toast.textContent || '')) {
+        toast.classList.remove('show');
+        toast.textContent = '';
+      }
+    };
+    hideIfDraftToast();
+    new MutationObserver(hideIfDraftToast).observe(toast, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class']
+    });
+  }
+
   installSelectionStyle();
   document.addEventListener('DOMContentLoaded', () => {
     installSelectionStyle();
     scan();
+    suppressDraftRestoreToast();
   }, { once: true });
   scan();
+  suppressDraftRestoreToast();
 
   new MutationObserver((mutations) => {
     for (const mutation of mutations) {
