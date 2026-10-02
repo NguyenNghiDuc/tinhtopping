@@ -99,6 +99,30 @@ import { requireSupabase } from './supabase.js';
     });
   }
 
+  function refreshUiAfterDelete(date) {
+    const deletedCard = recordsBody?.querySelector(`.day-record-card[data-date="${CSS.escape(date)}"]`);
+    if (deletedCard) deletedCard.remove();
+
+    const recordsMonth = document.querySelector('#recordsMonth');
+    if (recordsMonth) recordsMonth.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const summaryDate = document.querySelector('#summaryDate');
+    if (summaryDate?.value === date) summaryDate.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const statisticsMonth = document.querySelector('#statisticsMonth');
+    if (statisticsMonth?.value === date.slice(0, 7)) {
+      statisticsMonth.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    const toppingMonth = document.querySelector('#toppingMonth');
+    if (toppingMonth?.value === date.slice(0, 7)) {
+      toppingMonth.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+
+    const toppingDate = document.querySelector('#toppingDate');
+    if (toppingDate?.value === date) toppingDate.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
   async function deleteWholeDay(button) {
     if (deletingDay) return;
     const date = button.dataset.deleteDay;
@@ -121,19 +145,21 @@ import { requireSupabase } from './supabase.js';
       const expectedIds = before.data || [];
       if (!expectedIds.length) {
         window.alert('Ngày này không còn dữ liệu để xóa.');
-        window.location.reload();
+        refreshUiAfterDelete(date);
         return;
       }
+
       const deleted = await client.from('shifts').delete().eq('sales_date', date).select('id');
       if (deleted.error) throw deleted.error;
       const deletedIds = deleted.data || [];
       if (deletedIds.length !== expectedIds.length) {
-        window.alert(`Chỉ xóa được ${deletedIds.length}/${expectedIds.length} bản ghi. Có thể RLS đang giới hạn quyền xóa. Trang sẽ tải lại để hiển thị dữ liệu thực tế.`);
-        window.location.reload();
+        window.alert(`Chỉ xóa được ${deletedIds.length}/${expectedIds.length} bản ghi. Có thể RLS đang giới hạn quyền xóa.`);
+        refreshUiAfterDelete(date);
         return;
       }
+
+      refreshUiAfterDelete(date);
       window.alert(`Đã xóa toàn bộ dữ liệu ngày ${formatDateVi(date)}.`);
-      window.location.reload();
     } catch (error) {
       console.error('Không thể xóa toàn bộ dữ liệu ngày.', { date, error });
       window.alert(error?.message || 'Không thể xóa toàn bộ dữ liệu ngày này.');
