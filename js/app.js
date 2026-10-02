@@ -248,13 +248,15 @@ function renderBatchColumn(shiftId) {
     </div>`).join('');
   const totals = calculateShiftTotals(rows.map(rowQuantity), toppingTypes);
 
-  $(`#batch-column-${shiftId}`).innerHTML = `<article class="batch-shift-card ${style.className}">
+  const column = $(`#batch-column-${shiftId}`);
+  if (!column) return;
+  column.innerHTML = `<article class="batch-shift-card ${style.className}">
     <header class="batch-shift-heading">${style.icon}<h3>CA ${escapeHtml(shift.label.replace('Ca ', '')).toLocaleUpperCase('vi')}</h3></header>
     <div class="batch-roster-heading"><span>Nhân viên</span><span>Số topping / tiền</span><span class="visually-hidden">Thao tác</span></div>
     <div class="batch-employee-list">${employeeRows || '<p class="batch-no-employees">Chưa có nhân viên đang hoạt động.</p>'}</div>
     <div class="batch-add-controls">
       <select aria-label="Chọn nhân viên thêm vào ${escapeHtml(shift.label)}" data-batch-add-select="${shiftId}" ${availableEmployees.length ? '' : 'disabled'}><option value="">+ Thêm nhân viên</option>${availableEmployees.map((employee) => `<option value="${escapeHtml(employee.id)}">${escapeHtml(employee.name)}</option>`).join('')}</select>
-      <button class="batch-add-all" type="button" data-batch-action="add-all" data-shift="${shiftId}">+ Thêm tất cả nhân viên</button>
+      <button class="batch-add-all" type="button" data-batch-action="add-all" data-shift="${shiftId}" ${availableEmployees.length ? '' : 'disabled'}>+ Thêm tất cả nhân viên</button>
     </div>
     <label class="batch-note-field">Ghi chú ${escapeHtml(shift.label.toLocaleLowerCase('vi'))}<textarea rows="2" maxlength="500" placeholder="Ghi chú riêng cho ca này" data-batch-note="${shiftId}">${escapeHtml(batchNotesByShift[shiftId] || '')}</textarea></label>
     <footer class="batch-shift-total"><span>Tổng ${escapeHtml(shift.label.toLocaleLowerCase('vi'))}</span><strong><span data-batch-total-toppings>${formatNumber(totals.totalToppings)}</span> topping</strong><strong data-batch-total-money>${formatMoney(totals.totalMoney)}</strong></footer>
@@ -266,6 +268,7 @@ function updateBatchTotals() {
   let dayMoney = 0;
   SHIFTS.forEach((shift) => {
     const column = $(`#batch-column-${shift.id}`);
+    if (!column) return;
     const rows = batchRowsByShift[shift.id] || [];
     let shiftToppings = 0;
     rows.forEach((row, index) => {
@@ -276,13 +279,17 @@ function updateBatchTotals() {
       if (moneyOutput) moneyOutput.textContent = formatMoney(rowMoney);
     });
     const shiftMoney = calculateShiftTotals([shiftToppings], toppingTypes).totalMoney;
-    column.querySelector('[data-batch-total-toppings]').textContent = formatNumber(shiftToppings);
-    column.querySelector('[data-batch-total-money]').textContent = formatMoney(shiftMoney);
+    const totalToppingsOutput = column.querySelector('[data-batch-total-toppings]');
+    const totalMoneyOutput = column.querySelector('[data-batch-total-money]');
+    if (totalToppingsOutput) totalToppingsOutput.textContent = formatNumber(shiftToppings);
+    if (totalMoneyOutput) totalMoneyOutput.textContent = formatMoney(shiftMoney);
     dayToppings += shiftToppings;
     dayMoney += shiftMoney;
   });
-  $('#batchDayToppings').textContent = formatNumber(dayToppings);
-  $('#batchDayMoney').textContent = formatMoney(dayMoney);
+  const dayToppingsOutput = $('#batchDayToppings');
+  const dayMoneyOutput = $('#batchDayMoney');
+  if (dayToppingsOutput) dayToppingsOutput.textContent = formatNumber(dayToppings);
+  if (dayMoneyOutput) dayMoneyOutput.textContent = formatMoney(dayMoney);
 }
 
 function renderBatchColumns() {
@@ -320,7 +327,10 @@ async function setEditor(dateOrRecord = today) {
   setDatePickerValue($('#shiftDate'), selectedDate);
   $('#formError').hidden = true;
   $('#formError').textContent = '';
-  $('#shiftBatchColumns').innerHTML = '<p class="muted">Đang tải dữ liệu từ Supabase…</p>';
+  const batchColumns = $('#shiftBatchColumns');
+  if (batchColumns) {
+    batchColumns.innerHTML = SHIFTS.map((shift) => `<div id="batch-column-${shift.id}"><p class="muted">Đang tải dữ liệu từ Supabase…</p></div>`).join('');
+  }
   $('#shiftEditor').hidden = false;
   $('#shiftEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
@@ -374,12 +384,27 @@ function handleBatchColumnAction(event) {
 
   const presentIds = new Set(rows.map((row) => row.employeeId));
   const activeEmployees = employees.filter((employee) => employee.active);
-  const select = $(`[data-batch-add-select="${shiftId}"]`);
-  const additions = button.dataset.batchAction === 'add-all'
-    ? activeEmployees.filter((employee) => !presentIds.has(employee.id))
-    : activeEmployees.filter((employee) => employee.id === select?.value && !presentIds.has(employee.id));
-  additions.forEach((employee) => rows.push({ id: null, employeeId: employee.id, employee: employee.name, quantity: 0, originalQuantities: [], originalQuantity: 0 }));
-  if (additions.length) batchDirty = true;
+  if (button.dataset.batchAction === 'add-all') {
+    const additions = activeEmployees.filter((employee) => !presentIds.has(employee.id));
+    additions.forEach((employee) => rows.push({ id: null, employeeId: employee.id, employee: employee.name, quantity: 0, originalQuantities: [], originalQuantity: 0 }));
+    if (additions.length) batchDirty = true;
+    renderBatchColumn(shiftId);
+    updateBatchTotals();
+  }
+}
+
+function handleBatchEmployeeSelect(event) {
+  const select = event.target.closest('[data-batch-add-select]');
+  if (!select || !select.value) return;
+  const shiftId = select.dataset.batchAddSelect;
+  const rows = batchRowsByShift[shiftId] || [];
+  const employee = employees.find((item) => item.active && item.id === select.value);
+  if (!employee || rows.some((row) => row.employeeId === employee.id)) {
+    select.value = '';
+    return;
+  }
+  rows.push({ id: null, employeeId: employee.id, employee: employee.name, quantity: 0, originalQuantities: [], originalQuantity: 0 });
+  batchDirty = true;
   renderBatchColumn(shiftId);
   updateBatchTotals();
 }
@@ -893,6 +918,12 @@ function initialize() {
   if (cancelEditorButton) cancelEditorButton.addEventListener('click', closeEditor);
   const shiftForm = $('#shiftForm');
   if (shiftForm) shiftForm.addEventListener('submit', saveDayBatch);
+  const shiftBatchColumns = $('#shiftBatchColumns');
+  if (shiftBatchColumns) {
+    shiftBatchColumns.addEventListener('click', handleBatchColumnAction);
+    shiftBatchColumns.addEventListener('input', handleBatchInput);
+    shiftBatchColumns.addEventListener('change', handleBatchEmployeeSelect);
+  }
   const quickAddEmployeeButton = $('#quickAddEmployeeButton');
   if (quickAddEmployeeButton) quickAddEmployeeButton.addEventListener('click', () => {
     const quickEmployeeError = $('#quickEmployeeError');
