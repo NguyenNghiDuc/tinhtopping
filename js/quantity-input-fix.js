@@ -3,8 +3,8 @@
 
   function normalizeField(input) {
     if (!(input instanceof HTMLInputElement)) return;
-    if (input.dataset.quantityFixed === '2') return;
-    input.dataset.quantityFixed = '2';
+    if (input.dataset.quantityFixed === '3') return;
+    input.dataset.quantityFixed = '3';
 
     input.type = 'text';
     input.inputMode = 'numeric';
@@ -20,12 +20,30 @@
       return digits.replace(/^0+(?=\d)/, '') || '0';
     };
 
+    const selectZero = () => {
+      if (input.value !== '0') return;
+      try {
+        input.setSelectionRange(0, 1);
+      } catch {
+        input.select();
+      }
+    };
+
+    // Prevent the browser's mouse-up/click caret placement from cancelling
+    // the blue selection. Zero stays visible and selected until typing starts.
+    input.addEventListener('pointerdown', (event) => {
+      if (input.value !== '0') return;
+      event.preventDefault();
+      input.focus({ preventScroll: true });
+      selectZero();
+    });
+
     input.addEventListener('focus', () => {
-      if (input.value === '0') requestAnimationFrame(() => input.select());
+      if (input.value === '0') requestAnimationFrame(selectZero);
     });
 
     input.addEventListener('click', () => {
-      if (input.value === '0') requestAnimationFrame(() => input.select());
+      if (input.value === '0') requestAnimationFrame(selectZero);
     });
 
     input.addEventListener('beforeinput', (event) => {
