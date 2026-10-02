@@ -3,69 +3,55 @@
 
   function normalizeField(input) {
     if (!(input instanceof HTMLInputElement)) return;
-    if (input.dataset.quantityFixed === '3') return;
-    input.dataset.quantityFixed = '3';
+    if (input.dataset.quantityFixed === '4') return;
+    input.dataset.quantityFixed = '4';
 
+    // Use a plain text field with numeric keyboard. Do not set maxlength/max.
+    // This lets the user place the caret anywhere and type as many digits as needed.
     input.type = 'text';
     input.inputMode = 'numeric';
-    input.pattern = '[0-9]*';
     input.autocomplete = 'off';
+    input.removeAttribute('pattern');
     input.removeAttribute('max');
     input.removeAttribute('maxlength');
     input.removeAttribute('size');
 
-    const clean = (value) => {
-      const digits = String(value ?? '').replace(/\D+/g, '');
-      if (!digits) return '';
-      return digits.replace(/^0+(?=\d)/, '') || '0';
-    };
+    const clean = (value) => String(value ?? '').replace(/\D+/g, '');
 
     const selectZero = () => {
       if (input.value !== '0') return;
-      try {
-        input.setSelectionRange(0, 1);
-      } catch {
-        input.select();
-      }
+      try { input.setSelectionRange(0, 1); }
+      catch { input.select(); }
     };
 
-    // Prevent the browser's mouse-up/click caret placement from cancelling
-    // the blue selection. Zero stays visible and selected until typing starts.
+    // Only special-case the default value 0. Existing values such as 10, 100,
+    // 1000... behave like a normal text field so the caret can be placed anywhere.
     input.addEventListener('pointerdown', (event) => {
       if (input.value !== '0') return;
       event.preventDefault();
       input.focus({ preventScroll: true });
-      selectZero();
+      requestAnimationFrame(selectZero);
     });
 
     input.addEventListener('focus', () => {
       if (input.value === '0') requestAnimationFrame(selectZero);
     });
 
-    input.addEventListener('click', () => {
-      if (input.value === '0') requestAnimationFrame(selectZero);
-    });
-
-    input.addEventListener('beforeinput', (event) => {
-      if (event.inputType?.startsWith('delete') || event.inputType === 'insertFromPaste') return;
-      if (event.data && /\D/.test(event.data)) event.preventDefault();
-    });
-
     input.addEventListener('input', () => {
       input.removeAttribute('max');
       input.removeAttribute('maxlength');
-      const before = input.value;
-      const after = clean(before);
-      if (before !== after) input.value = after;
-    }, true);
 
-    input.addEventListener('paste', () => {
-      requestAnimationFrame(() => {
-        const after = clean(input.value);
-        if (input.value !== after) input.value = after;
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-      });
-    });
+      const start = input.selectionStart ?? input.value.length;
+      const before = input.value;
+      const cleanedBeforeCaret = before.slice(0, start).replace(/\D+/g, '');
+      const after = clean(before);
+
+      if (before !== after) {
+        input.value = after;
+        const caret = Math.min(cleanedBeforeCaret.length, after.length);
+        try { input.setSelectionRange(caret, caret); } catch {}
+      }
+    }, true);
 
     input.addEventListener('blur', () => {
       if (input.value === '') {
@@ -88,10 +74,16 @@
       if (mutation.type === 'attributes' && mutation.target instanceof HTMLInputElement && mutation.target.matches(selector)) {
         mutation.target.removeAttribute('max');
         mutation.target.removeAttribute('maxlength');
+        mutation.target.removeAttribute('pattern');
       }
       for (const node of mutation.addedNodes || []) {
         if (node instanceof Element) scan(node);
       }
     }
-  }).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['max', 'maxlength'] });
+  }).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['max', 'maxlength', 'pattern']
+  });
 })();
