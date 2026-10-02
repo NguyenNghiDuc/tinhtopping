@@ -1,4 +1,4 @@
-const CACHE = 'tinhtopping-v5';
+const CACHE = 'tinhtopping-v6';
 const ASSETS = [
   './',
   './index.html',
@@ -11,6 +11,7 @@ const ASSETS = [
   './public/css/pro-tools.css',
   './js/app.js',
   './js/batch-fix.js',
+  './js/quantity-input-fix.js',
   './js/employee-delete.js',
   './js/productivity.js',
   './js/convenience.js',
@@ -41,7 +42,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
   event.respondWith(
-    fetch(request)
+    fetch(request, { cache: 'no-store' })
       .then((response) => {
         if (response.ok) {
           const copy = response.clone();
