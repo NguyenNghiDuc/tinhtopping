@@ -1,13 +1,28 @@
 (() => {
   const selector = '[data-batch-quantity]';
 
+  function installSelectionStyle() {
+    if (document.querySelector('#quantity-selection-style')) return;
+    const style = document.createElement('style');
+    style.id = 'quantity-selection-style';
+    style.textContent = `
+      input[data-batch-quantity]::selection {
+        background: #2563eb;
+        color: #ffffff;
+      }
+      input[data-batch-quantity]::-moz-selection {
+        background: #2563eb;
+        color: #ffffff;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
   function normalizeField(input) {
     if (!(input instanceof HTMLInputElement)) return;
-    if (input.dataset.quantityFixed === '4') return;
-    input.dataset.quantityFixed = '4';
+    if (input.dataset.quantityFixed === '5') return;
+    input.dataset.quantityFixed = '5';
 
-    // Use a plain text field with numeric keyboard. Do not set maxlength/max.
-    // This lets the user place the caret anywhere and type as many digits as needed.
     input.type = 'text';
     input.inputMode = 'numeric';
     input.autocomplete = 'off';
@@ -20,26 +35,49 @@
 
     const selectZero = () => {
       if (input.value !== '0') return;
-      try { input.setSelectionRange(0, 1); }
-      catch { input.select(); }
+      input.focus({ preventScroll: true });
+      try {
+        input.setSelectionRange(0, 1, 'forward');
+      } catch {
+        input.select();
+      }
     };
 
-    // Only special-case the default value 0. Existing values such as 10, 100,
-    // 1000... behave like a normal text field so the caret can be placed anywhere.
-    input.addEventListener('pointerdown', (event) => {
+    const holdZeroSelection = (event) => {
       if (input.value !== '0') return;
       event.preventDefault();
-      input.focus({ preventScroll: true });
+      selectZero();
       requestAnimationFrame(selectZero);
-    });
+      setTimeout(selectZero, 0);
+    };
 
+    // For the default zero, keep it visible and highlighted. Prevent the
+    // browser from moving the caret after mouse/pointer release.
+    input.addEventListener('pointerdown', holdZeroSelection);
+    input.addEventListener('mousedown', holdZeroSelection);
+    input.addEventListener('mouseup', (event) => {
+      if (input.value !== '0') return;
+      event.preventDefault();
+      selectZero();
+    });
+    input.addEventListener('click', (event) => {
+      if (input.value !== '0') return;
+      event.preventDefault();
+      selectZero();
+    });
     input.addEventListener('focus', () => {
-      if (input.value === '0') requestAnimationFrame(selectZero);
+      if (input.value === '0') {
+        selectZero();
+        requestAnimationFrame(selectZero);
+      }
     });
 
+    // If zero is selected, the first digit naturally replaces it. For every
+    // other value, the field behaves like a normal unlimited text input.
     input.addEventListener('input', () => {
       input.removeAttribute('max');
       input.removeAttribute('maxlength');
+      input.removeAttribute('pattern');
 
       const start = input.selectionStart ?? input.value.length;
       const before = input.value;
@@ -66,7 +104,11 @@
     root.querySelectorAll?.(selector).forEach(normalizeField);
   }
 
-  document.addEventListener('DOMContentLoaded', () => scan(), { once: true });
+  installSelectionStyle();
+  document.addEventListener('DOMContentLoaded', () => {
+    installSelectionStyle();
+    scan();
+  }, { once: true });
   scan();
 
   new MutationObserver((mutations) => {
