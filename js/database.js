@@ -133,6 +133,61 @@ export async function getSalesForDate(date) {
   return rows.map((row) => mapShift(row, toppingTypes));
 }
 
+export async function getShiftNotesForDate(date) {
+  const result = await requireSupabase().from('shifts').select('sales_date,shift,note').eq('sales_date', date);
+  return throwIfError(result)
+    .filter((row) => row.shift)
+    .map((row) => ({ sales_date: row.sales_date, shift: row.shift, note: row.note || '' }));
+}
+
+export async function getShiftNotesForMonth(month) {
+  const { start, end } = monthRange(month);
+  const result = await requireSupabase().from('shifts').select('sales_date,shift,note')
+    .gte('sales_date', start).lt('sales_date', end).order('sales_date', { ascending: false });
+  return throwIfError(result)
+    .filter((row) => row.shift)
+    .map((row) => ({ sales_date: row.sales_date, shift: row.shift, note: row.note || '' }));
+}
+
+export async function saveDayToppings({ date, entries = [], notes = [], deleteIds = [] }) {
+  const client = requireSupabase();
+
+  for (const deleteId of [...new Set((deleteIds || []).filter(Boolean))]) {
+    const result = await client.from('shifts').delete().eq('id', deleteId).select('id').maybeSingle();
+    if (result.error) throw result.error;
+  }
+
+  for (const entry of entries || []) {
+    if (!entry || !entry.shift || !entry.employee_id) continue;
+    const toppingRows = (entry.toppings || []).map((item) => ({
+      topping_type_id: item.topping_type_id,
+      quantity: Math.max(0, Math.floor(Number(item.quantity) || 0))
+    })).filter((item) => item.quantity > 0);
+
+    const rpcResult = await client.rpc('save_shift', {
+      p_shift_id: entry.id || null,
+      p_sales_date: date,
+      p_shift: entry.shift,
+      p_employee_id: entry.employee_id,
+      p_note: entry.note || '',
+      p_toppings: toppingRows
+    });
+    throwIfError(rpcResult);
+  }
+
+  for (const note of notes || []) {
+    if (!note || !note.shift) continue;
+    const noteRows = await client.from('shifts').select('id').eq('sales_date', date).eq('shift', note.shift);
+    const shiftRows = throwIfError(noteRows);
+    for (const shiftRow of shiftRows) {
+      const noteResult = await client.from('shifts').update({ note: note.note || '' }).eq('id', shiftRow.id);
+      if (noteResult.error) throw noteResult.error;
+    }
+  }
+
+  return { ok: true };
+}
+
 async function saveSalesRecord(record) {
   const client = requireSupabase();
   const toppingTypes = await getToppingTypes();
@@ -161,5 +216,13 @@ export async function updateSalesRecord(id, record) {
 }
 
 export async function deleteSalesRecord(id) {
-  return throwIfError(await requireSupabase().from('shifts').delete().eq('id', id));
+  const result = await requireSupabase().from('shifts').delete().eq('id', id).select('id').maybeSingle();
+  const deletedRecord = throwIfError(result);
+  if (!deletedRecord) {
+    throw Object.assign(new Error('Không xóa được bản ghi: bản ghi không tồn tại hoặc RLS policy không cho phép.'), {
+      code: 'RECORD_NOT_DELETED',
+      details: `Không có bản ghi được xóa với id=${id}`
+    });
+  }
+  return deletedRecord;
 }

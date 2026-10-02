@@ -85,27 +85,15 @@
             <button class="icon-button" id="closeEditorButton" type="button" aria-label="Đóng chi tiết"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
           </div>
           <form id="shiftForm" novalidate>
-            <div class="record-fields">
-              <label class="form-field"><span>Ngày</span><input id="shiftDate" class="date-picker" name="date" type="text" inputmode="numeric" placeholder="dd/mm/yyyy" required></label>
-              <div class="form-field shift-field"><span>Ca</span><div class="shift-toggle" role="group" aria-label="Chọn ca">
-                <button class="shift-option active" type="button" data-shift="morning">Sáng</button>
-                <button class="shift-option" type="button" data-shift="afternoon">Chiều</button>
-                <button class="shift-option" type="button" data-shift="evening">Tối</button>
-              </div><select id="shiftName" name="shift" hidden required><option value="morning">Ca Sáng</option><option value="afternoon">Ca Chiều</option><option value="evening">Ca Tối</option></select></div>
-              <div class="form-field employee-field"><label for="employeeId">Nhân viên đứng ca</label><div class="field-combo"><select id="employeeId" name="employeeId" required></select><button class="button button-quiet manager-only" id="quickAddEmployeeButton" type="button" hidden><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3"/><path d="M19 8v6M16 11h6"/></svg>Thêm nhân viên</button></div></div>
+            <label class="form-field batch-date-field"><span>Ngày</span><input id="shiftDate" class="date-picker" name="date" type="text" inputmode="numeric" placeholder="dd/mm/yyyy" required></label>
+            <div class="batch-shift-columns" id="shiftBatchColumns" aria-live="polite"></div>
+            <div class="batch-day-total">
+              <div><span class="eyebrow">TỔNG NGÀY</span><strong><span id="batchDayToppings">0</span> topping</strong></div>
+              <strong id="batchDayMoney">0đ</strong>
             </div>
-            <div class="quick-employee-form" id="quickEmployeeForm" hidden>
-              <label class="form-field" for="quickEmployeeName"><span>Tên nhân viên mới</span><input id="quickEmployeeName" type="text" maxlength="60"></label>
-              <button class="button button-primary" id="saveQuickEmployeeButton" type="button"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="3"/><path d="M19 8v6M16 11h6"/></svg>Thêm và chọn</button>
-              <button class="button button-quiet" id="cancelQuickEmployeeButton" type="button">Hủy</button>
-              <p class="form-error" id="quickEmployeeError" role="alert" hidden></p>
-            </div>
-            <div class="topping-section-heading"><div><h3>Số lượng topping</h3><p class="muted">Nhập số lượng đã bán; tiền tự tính theo đơn giá 1.000đ.</p></div></div>
-            <div class="topping-grid" id="toppingInputs"></div>
-            <label class="form-field note-field" for="shiftNote"><span>Ghi chú</span><textarea id="shiftNote" rows="2" maxlength="500" placeholder="Ghi chú thêm cho ca này"></textarea></label>
             <div class="editor-footer">
-              <div class="calculation-total"><span><strong id="totalToppings">0</strong> topping</span><strong id="totalMoney">0đ</strong></div>
-              <div class="editor-actions"><button class="button button-quiet" id="cancelEditorButton" type="button">Hủy</button><button class="button button-primary" type="submit" id="saveShiftButton"><svg class="button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l4 4L19 2"/><path d="M19 2l-8 8"/></svg>Lưu ca</button></div>
+              <span class="muted">Mỗi topping 1.000đ</span>
+              <div class="editor-actions"><button class="button button-quiet" id="cancelEditorButton" type="button">Hủy</button><button class="button button-primary" type="submit" id="saveShiftButton">LƯU TẤT CẢ</button></div>
             </div>
             <p class="form-error" id="formError" role="alert" hidden></p>
           </form>
@@ -148,6 +136,16 @@
       </section>
     </main>
   </div>
+  <dialog class="confirm-dialog" id="deleteRecordDialog" aria-labelledby="deleteRecordHeading">
+    <form method="dialog">
+      <h2 id="deleteRecordHeading">Xác nhận xóa</h2>
+      <p>Bạn có chắc muốn xóa bản ghi này?</p>
+      <div class="confirm-dialog-actions">
+        <button class="button button-quiet" value="cancel">Hủy</button>
+        <button class="button button-danger" value="delete">Xóa</button>
+      </div>
+    </form>
+  </dialog>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>
