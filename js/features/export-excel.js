@@ -8,8 +8,8 @@ const SHIFT_LABELS = {
   evening: 'Ca Tối'
 };
 
-const PAGE_SIZE = 500;   // số dòng mỗi lần lấy từ Supabase (giới hạn mặc định là 1000)
-const CHUNK_SIZE = 50;   // số id mỗi lần dùng cho .in(...) để URL không quá dài
+const PAGE_SIZE = 500;
+const CHUNK_SIZE = 50;
 
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -17,16 +17,12 @@ function esc(value) {
   })[char]);
 }
 
-function currentLocalMonth() {
+function currentLocalDate() {
   const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-}
-
-function monthBounds(month) {
-  const [year, monthNumber] = String(month).split('-').map(Number);
-  const nextYear = monthNumber === 12 ? year + 1 : year;
-  const nextMonth = monthNumber === 12 ? 1 : monthNumber + 1;
-  return [`${month}-01`, `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`];
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function formatDate(isoDate) {
@@ -34,15 +30,13 @@ function formatDate(isoDate) {
   return y && m && d ? `${d}/${m}/${y}` : String(isoDate || '');
 }
 
-async function fetchAllShifts(client, start, end) {
+async function fetchAllShifts(client, date) {
   const all = [];
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await client
       .from('shifts')
       .select('id,sales_date,shift,employee_id,note')
-      .gte('sales_date', start)
-      .lt('sales_date', end)
-      .order('sales_date', { ascending: true })
+      .eq('sales_date', date)
       .order('shift', { ascending: true })
       .order('id', { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
@@ -56,19 +50,17 @@ async function fetchAllShifts(client, start, end) {
 async function fetchByIds(client, table, columns, key, ids) {
   const all = [];
   for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
-    const chunk = ids.slice(i, i + CHUNK_SIZE);
-    const { data, error } = await client.from(table).select(columns).in(key, chunk);
+    const idChunk = ids.slice(i, i + CHUNK_SIZE);
+    const { data, error } = await client.from(table).select(columns).in(key, idChunk);
     if (error) throw error;
     all.push(...(data || []));
   }
   return all;
 }
 
-async function loadExcelRows(month) {
+async function loadExcelRows(date) {
   const client = requireSupabase();
-  const [start, end] = monthBounds(month);
-
-  const shifts = await fetchAllShifts(client, start, end);
+  const shifts = await fetchAllShifts(client, date);
   if (!shifts.length) return [];
 
   const employeeIds = [...new Set(shifts.map((row) => row.employee_id).filter(Boolean))];
@@ -98,14 +90,13 @@ async function loadExcelRows(month) {
   });
 }
 
-function buildWorkbook(rows, month) {
-  const [year, monthNumber] = month.split('-');
+function buildWorkbook(rows, date) {
   const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
   const totalMoney = rows.reduce((sum, row) => sum + row.money, 0);
 
   return buildXlsxBlob({
-    sheetName: `Topping ${monthNumber}-${year}`,
-    title: `BÁO CÁO TOPPING THÁNG ${monthNumber}/${year}`,
+    sheetName: `Topping ${formatDate(date)}`,
+    title: `BÁO CÁO TOPPING NGÀY ${formatDate(date)}`,
     headers: ['Ngày', 'Ca', 'Nhân viên', 'Topping', 'Tiền', 'Ghi chú'],
     rows: rows.map((row) => [formatDate(row.date), row.shift, row.employee, row.quantity, row.money, row.note]),
     totals: ['Tổng cộng', '', '', totalQuantity, totalMoney, ''],
@@ -142,7 +133,6 @@ function showDownload(filename, blob, summary) {
   link.textContent = `⬇ Tải ${filename}`;
   box?.appendChild(link);
 
-  // Thử tải tự động; nếu trình duyệt chặn thì nút phía trên vẫn dùng được.
   try { link.click(); } catch (error) { console.warn('[Excel] Không tự tải được.', error); }
 }
 
@@ -150,28 +140,28 @@ async function exportExcel() {
   const button = $('#featureExcel');
   if (!button) return;
 
-  const monthInput = $('#excelMonth');
-  const month = /^\d{4}-\d{2}$/.test(monthInput?.value || '') ? monthInput.value : currentLocalMonth();
-  const filename = `topping-${month}.xlsx`;
+  const dateInput = $('#excelDate');
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(dateInput?.value || '') ? dateInput.value : currentLocalDate();
+  const filename = `topping-${date}.xlsx`;
   const oldText = button.textContent;
 
   button.disabled = true;
   button.textContent = 'Đang tạo Excel...';
-  setStatus(`Đang lấy dữ liệu tháng ${esc(month)}...`);
+  setStatus(`Đang lấy dữ liệu ngày ${esc(formatDate(date))}...`);
 
   try {
-    console.info('[Excel] Bắt đầu xuất tháng', month);
-    const rows = await loadExcelRows(month);
+    console.info('[Excel] Bắt đầu xuất ngày', date);
+    const rows = await loadExcelRows(date);
     console.info('[Excel] Số dòng lấy được', rows.length);
 
     if (!rows.length) {
-      setStatus(`<strong>Tháng ${esc(month)} chưa có dữ liệu để xuất.</strong><br>Hãy đổi sang tháng có nhập topping ở ô "Tháng" phía trên.`);
-      notify(`Tháng ${month} chưa có dữ liệu để xuất.`, 5000);
+      setStatus(`<strong>Ngày ${esc(formatDate(date))} chưa có dữ liệu để xuất.</strong><br>Hãy chọn ngày có nhập topping.`);
+      notify(`Ngày ${formatDate(date)} chưa có dữ liệu để xuất.`, 5000);
       return;
     }
 
     const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
-    const blob = buildWorkbook(rows, month);
+    const blob = buildWorkbook(rows, date);
     showDownload(filename, blob, `${rows.length} dòng, tổng ${totalQuantity.toLocaleString('vi-VN')} topping.`);
     notify(`Đã tạo ${filename}`, 4000);
   } catch (error) {
@@ -194,18 +184,18 @@ function boot() {
   panel.id = 'excelExportPanel';
   panel.innerHTML = `
     <h3>Xuất Excel</h3>
-    <p class="muted">Chọn tháng rồi bấm nút để tạo file Excel (.xlsx).</p>
+    <p class="muted">Chọn đầy đủ ngày / tháng / năm rồi bấm Xuất Excel.</p>
     <div class="feature-toolbar">
-      <label>Tháng<input id="excelMonth" type="month"></label>
+      <label>Ngày / tháng / năm<input id="excelDate" type="date"></label>
       <button class="feature-btn primary" id="featureExcel" type="button">Xuất Excel</button>
     </div>
     <div id="excelExportResult" style="margin-top:12px"></div>
   `;
   host.prepend(panel);
 
-  const monthInput = $('#excelMonth');
-  const recordsMonth = $('#recordsMonth')?.value;
-  monthInput.value = /^\d{4}-\d{2}$/.test(recordsMonth || '') ? recordsMonth : currentLocalMonth();
+  const dateInput = $('#excelDate');
+  const shiftDate = $('#shiftDate')?.value;
+  dateInput.value = /^\d{4}-\d{2}-\d{2}$/.test(shiftDate || '') ? shiftDate : currentLocalDate();
 
   $('#featureExcel').addEventListener('click', () => void exportExcel());
 }
