@@ -3,6 +3,15 @@ import { requireSupabase } from './supabase.js';
 let loaded = false;
 let loading = false;
 
+const FEATURE_MODULES = [
+  './batch-fix.js',
+  './employee-delete.js',
+  './productivity.js',
+  './advanced.js',
+  './stats-all-employees.js',
+  './pro-tools.js'
+];
+
 async function loadAuthenticatedFeatures() {
   if (loaded || loading) return;
   loading = true;
@@ -12,16 +21,13 @@ async function loadAuthenticatedFeatures() {
     if (error || !data?.session?.user) return;
 
     loaded = true;
-    const names = ['advanced.js', 'stats-all-employees.js', 'pro-tools.js'];
-    const results = await Promise.allSettled([
-      import('./advanced.js'),
-      import('./stats-all-employees.js'),
-      import('./pro-tools.js')
-    ]);
+    const results = await Promise.allSettled(
+      FEATURE_MODULES.map((modulePath) => import(modulePath))
+    );
 
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
-        console.error(`Không tải được ${names[index]}.`, result.reason);
+        console.error(`Không tải được ${FEATURE_MODULES[index]}.`, result.reason);
       }
     });
   } finally {
