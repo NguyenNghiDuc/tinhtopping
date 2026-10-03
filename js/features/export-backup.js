@@ -7,25 +7,58 @@ function isIOSLike(){
   return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }
 
-async function download(name,blob){
-  // iPhone/iPad và một số trình duyệt trong app không xử lý tốt thẻ a[download].
-  // Nếu hỗ trợ chia sẻ file, mở Share Sheet để người dùng chọn "Lưu vào Tệp".
-  if (typeof File !== 'undefined' && navigator.share && navigator.canShare) {
+function ensureDownloadFallbackHost(){
+  let host = $('#featureDownloadFallback');
+  if (host) return host;
+  const tools = $('#feature-tools-host');
+  if (!tools) return null;
+  host = document.createElement('div');
+  host.id = 'featureDownloadFallback';
+  host.style.marginTop = '10px';
+  tools.prepend(host);
+  return host;
+}
+
+function showManualDownload(name, blob){
+  const host = ensureDownloadFallbackHost();
+  if (!host) return;
+  const oldUrl = host.dataset.objectUrl;
+  if (oldUrl) URL.revokeObjectURL(oldUrl);
+  const url = URL.createObjectURL(blob);
+  host.dataset.objectUrl = url;
+  host.innerHTML = '';
+  const box = document.createElement('div');
+  box.className = 'feature-warning feature-ok';
+  box.innerHTML = '<strong>File đã tạo xong.</strong> Nếu trình duyệt không tự tải, bấm nút bên dưới.';
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  link.className = 'feature-btn primary';
+  link.style.display = 'inline-flex';
+  link.style.marginTop = '8px';
+  link.textContent = `Tải ${name}`;
+  box.appendChild(document.createElement('br'));
+  box.appendChild(link);
+  host.appendChild(box);
+}
+
+async function saveBlob(name, blob){
+  if (isIOSLike() && typeof File !== 'undefined' && navigator.share && navigator.canShare) {
     try {
       const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
       if (navigator.canShare({ files: [file] })) {
         await navigator.share({ files: [file], title: name });
-        return;
+        return { method: 'share' };
       }
     } catch (error) {
-      if (error?.name === 'AbortError') return;
-      console.warn('Không thể chia sẻ file, chuyển sang cách tải truyền thống.', error);
+      if (error?.name === 'AbortError') return { method: 'cancelled' };
+      console.warn('Không thể chia sẻ file, chuyển sang tải truyền thống.', error);
     }
   }
 
-  const u = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = u;
+  a.href = url;
   a.download = name;
   a.rel = 'noopener';
   a.style.display = 'none';
@@ -33,19 +66,10 @@ async function download(name,blob){
   a.click();
   a.remove();
 
-  // Safari cần giữ Blob URL sống lâu hơn một nhịp để bắt đầu tải.
-  setTimeout(() => URL.revokeObjectURL(u), 3000);
-
-  // WebView iOS có thể bỏ qua thuộc tính download. Khi đó mở file ở tab mới để vẫn lấy được file.
-  if (isIOSLike()) {
-    setTimeout(() => {
-      if (document.visibilityState === 'visible') {
-        const previewUrl = URL.createObjectURL(blob);
-        const opened = window.open(previewUrl, '_blank');
-        if (opened) setTimeout(() => URL.revokeObjectURL(previewUrl), 15000);
-      }
-    }, 500);
-  }
+  // Luôn hiện link tải dự phòng vì Codespaces/WebView/Safari có thể chặn click tự động.
+  showManualDownload(name, blob);
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return { method: 'anchor' };
 }
 
 function shiftName(value){
@@ -56,24 +80,61 @@ function excelHtml(rows, month){
   const totalToppings = rows.reduce((sum,row)=>sum+rowQuantity(row),0);
   const totalMoney = totalToppings * 1000;
   const body = rows.map(r=>`<tr><td>${esc(r.sales_date)}</td><td>${esc(shiftName(r.shift))}</td><td>${esc(r.employees?.name||'')}</td><td style="mso-number-format:'0'">${rowQuantity(r)}</td><td style="mso-number-format:'#,##0'">${rowQuantity(r)*1000}</td><td>${esc(r.note||'')}</td></tr>`).join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><meta name="ProgId" content="Excel.Sheet"><style>table{border-collapse:collapse}th,td{border:1px solid #999;padding:6px}th{font-weight:700;background:#eef2ff}</style></head><body><table><tr><th colspan="6">BÁO CÁO TOPPING THÁNG ${esc(month)}</th></tr><tr><th>Ngày</th><th>Ca</th><th>Nhân viên</th><th>Topping</th><th>Tiền</th><th>Ghi chú</th></tr>${body}<tr><th colspan="3">Tổng cộng</th><th>${totalToppings}</th><th>${totalMoney}</th><th></th></tr></table></body></html>`;
+  return `<!doctype html><html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><meta name="ProgId" content="Excel.Sheet"><style>table{border-collapse:collapse}th,td{border:1px solid #999;padding:6px}th{font-weight:700;background:#eef2ff}</style></head><body><table><tr><th colspan="6">BÁO CÁO TOPPING THÁNG ${esc(month)}</th></tr><tr><th>Ngày</th><th>Ca</th><th>Nhân viên</th><th>Topping</th><th>Tiền</th><th>Ghi chú</th></tr>${body}<tr><th colspan="3">Tổng cộng</th><th>${totalToppings}</th><th>${totalMoney}</th><th></th></tr></table></body></html>`;
 }
 
 async function exportExcel(){
   const button = $('#featureExcel');
   const oldText = button?.textContent || 'Xuất Excel';
+  const month = $('#recordsMonth')?.value || new Date().toISOString().slice(0,7);
+  const name = `topping-${month}.xls`;
+
+  // Chrome/Edge desktop: gọi Save Picker ngay trong click để không mất user activation.
+  let fileHandlePromise = null;
+  if (window.isSecureContext && typeof window.showSaveFilePicker === 'function') {
+    try {
+      fileHandlePromise = window.showSaveFilePicker({
+        suggestedName: name,
+        types: [{
+          description: 'Excel 97-2003',
+          accept: { 'application/vnd.ms-excel': ['.xls'] }
+        }]
+      });
+    } catch (error) {
+      console.warn('Không mở được hộp thoại lưu file.', error);
+    }
+  }
+
   if (button) { button.disabled = true; button.textContent = 'Đang xuất...'; }
   try {
-    const month = $('#recordsMonth')?.value || new Date().toISOString().slice(0,7);
     const rows = await fetchMonthRows(month);
     if (!rows.length) {
       notify(`Tháng ${month} chưa có dữ liệu để xuất.`);
       return;
     }
+
     const html = excelHtml(rows, month);
     const blob = new Blob(['\ufeff', html], { type:'application/vnd.ms-excel;charset=utf-8' });
-    await download(`topping-${month}.xls`, blob);
-    notify('Đã tạo file Excel. Trên iPhone hãy chọn “Lưu vào Tệp” nếu Share Sheet hiện ra.');
+
+    if (fileHandlePromise) {
+      try {
+        const handle = await fileHandlePromise;
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        notify(`Đã lưu ${name}.`);
+        return;
+      } catch (error) {
+        if (error?.name === 'AbortError') {
+          notify('Bạn đã hủy lưu file Excel.');
+          return;
+        }
+        console.warn('Save Picker thất bại, chuyển sang tải dự phòng.', error);
+      }
+    }
+
+    const result = await saveBlob(name, blob);
+    if (result.method !== 'cancelled') notify('Đã tạo file Excel. Nếu chưa tự tải, bấm nút “Tải topping...” vừa hiện.');
   } catch (error) {
     console.error('Xuất Excel thất bại.', error);
     notify(error?.message ? `Xuất Excel lỗi: ${error.message}` : 'Không thể xuất Excel.');
@@ -97,8 +158,9 @@ async function exportPdf(){
 async function backupJson(){
   try {
     const month=$('#recordsMonth')?.value||new Date().toISOString().slice(0,7),rows=await fetchMonthRows(month);
-    await download(`backup-topping-${month}.json`,new Blob([JSON.stringify({version:1,month,created_at:new Date().toISOString(),rows},null,2)],{type:'application/json'}));
-    notify('Đã backup JSON.');
+    const blob=new Blob([JSON.stringify({version:1,month,created_at:new Date().toISOString(),rows},null,2)],{type:'application/json'});
+    await saveBlob(`backup-topping-${month}.json`,blob);
+    notify('Đã tạo backup JSON.');
   } catch (error) {
     console.error('Backup JSON thất bại.', error);
     notify(error?.message ? `Backup lỗi: ${error.message}` : 'Không thể backup JSON.');
