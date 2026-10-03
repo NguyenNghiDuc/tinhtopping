@@ -1,6 +1,10 @@
 import { $, money, fetchMonthRows, rowQuantity } from './shared.js';
 
 const shiftLabels = { morning: 'Ca Sáng', afternoon: 'Ca Chiều', evening: 'Ca Tối' };
+let renderTimer = null;
+let renderRunning = false;
+let renderRetryCount = 0;
+const MAX_RENDER_RETRIES = 40;
 
 const today = () => {
   const now = new Date();
@@ -89,8 +93,9 @@ function drawEmployeeBarChart(svg, entries) {
 
 async function render() {
   const host = $('#feature-dashboard-host');
-  if (!host) return;
+  if (!host || renderRunning) return false;
 
+  renderRunning = true;
   host.innerHTML = '<section class="feature-panel"><p class="muted">Đang tải tổng quan...</p></section>';
 
   try {
@@ -133,18 +138,49 @@ async function render() {
       <section class="feature-panel">
         <h3>Biểu đồ topping theo nhân viên</h3>
         <p class="muted">Mỗi cột là tổng topping của một nhân viên trong tháng đang chọn.</p>
-        <div style="overflow-x:auto;padding-bottom:4px">
+        <div style="overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch">
           <svg id="featureEmployeeChart" style="width:100%;min-width:900px;height:320px;display:block"></svg>
         </div>
       </section>
     `;
 
     drawEmployeeBarChart($('#featureEmployeeChart'), employeeEntries);
+    renderRetryCount = 0;
+    document.documentElement.dataset.dashboardRendered = '1';
+    return true;
   } catch (error) {
+    console.error('[Dashboard] Không tải được tổng quan.', error);
     host.innerHTML = `<section class="feature-panel"><p class="feature-warning">${esc(error.message || 'Không tải được tổng quan.')}</p></section>`;
+    return false;
+  } finally {
+    renderRunning = false;
   }
 }
 
-render();
-$('#recordsMonth')?.addEventListener('change', render);
-document.addEventListener('topping:settings-changed', render);
+function scheduleRender(delay = 0) {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(async () => {
+    renderTimer = null;
+    const rendered = await render();
+    if (!rendered && !$('#feature-dashboard-host') && renderRetryCount < MAX_RENDER_RETRIES) {
+      renderRetryCount += 1;
+      scheduleRender(250);
+    }
+  }, delay);
+}
+
+scheduleRender();
+document.addEventListener('DOMContentLoaded', () => scheduleRender(), { once: true });
+document.addEventListener('topping:features-ready', () => scheduleRender(50));
+document.addEventListener('topping:session-ready', () => scheduleRender(50));
+document.addEventListener('topping:settings-changed', () => scheduleRender());
+window.addEventListener('pageshow', () => scheduleRender(50));
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') scheduleRender(50);
+});
+document.addEventListener('click', (event) => {
+  if (event.target.closest?.('.nav-link[data-view="dashboard"]')) scheduleRender(50);
+});
+
+const recordsMonth = $('#recordsMonth');
+if (recordsMonth) recordsMonth.addEventListener('change', () => scheduleRender());
