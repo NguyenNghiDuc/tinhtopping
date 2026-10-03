@@ -9,8 +9,6 @@ let retryCount = 0;
 const MAX_RETRIES = 20;
 const RETRY_DELAY_MS = 500;
 
-// Shell chỉ tạo menu/view, không cần đợi auth. Load ngay để mọi trình duyệt
-// đều có cùng cấu trúc giao diện; dữ liệu nhạy cảm vẫn do các module + RLS kiểm soát.
 const SHELL_MODULE = './features/feature-shell.js';
 
 const AUTH_FEATURE_MODULES = [
@@ -22,6 +20,7 @@ const AUTH_FEATURE_MODULES = [
   './features/settings-page.js',
   './features/dashboard-insights.js',
   './features/history-operations.js',
+  './features/export-excel.js',
   './features/export-backup.js',
   './features/audit-login.js',
   './features/trash-recovery.js',
@@ -60,7 +59,6 @@ async function importFeatureModules() {
       }
     }
 
-    // Đánh dấu hoàn tất ngay cả khi một module phụ lỗi: module khác vẫn dùng được.
     featuresLoaded = true;
     document.documentElement.dataset.featuresLoaded = '1';
     document.documentElement.dataset.featureFailures = String(failed.length);
@@ -119,8 +117,6 @@ function scheduleSessionRetry(client) {
 }
 
 async function init() {
-  // Quan trọng: tạo shell ngay từ đầu. Đây là phần khắc phục trường hợp một máy
-  // chỉ thấy 3 menu cũ vì auth event/getSession đến chậm hoặc bị WebView bỏ lỡ.
   await ensureFeatureShell();
 
   const client = requireSupabase();
@@ -138,20 +134,16 @@ async function init() {
 
     if (!['SIGNED_IN', 'TOKEN_REFRESHED', 'INITIAL_SESSION', 'USER_UPDATED'].includes(event)) return;
 
-    // Ra khỏi auth callback trước khi import để tránh deadlock/race ở Safari/WebView.
     setTimeout(() => {
       void importFeatureModules();
     }, 0);
   });
 
-  // app.js phát event này sau khi role + dữ liệu lõi đã sẵn sàng.
   document.addEventListener('topping:session-ready', () => {
     clearRetryTimer();
     void importFeatureModules();
   });
 
-  // Một số webview có thể bỏ lỡ auth event khi tab được resume. Kiểm tra lại khi
-  // trang quay về foreground hoặc người dùng chuyển tab trở lại.
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && !featuresLoaded) {
       void tryLoadFromCurrentSession(client).then((loaded) => {
@@ -171,6 +163,5 @@ async function init() {
 
 init().catch((error) => {
   console.error('Không thể khởi tạo tính năng mở rộng.', error);
-  // Dù auth loader lỗi, vẫn cố giữ shell/menu mới hiển thị đồng nhất.
   void ensureFeatureShell();
 });
