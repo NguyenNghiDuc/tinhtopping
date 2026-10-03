@@ -10,6 +10,9 @@ const SHIFT_LABELS = {
 
 const PAGE_SIZE = 500;
 const CHUNK_SIZE = 50;
+let bootRetryTimer = null;
+let bootAttempts = 0;
+const MAX_BOOT_ATTEMPTS = 40;
 
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -176,8 +179,14 @@ async function exportExcel() {
 }
 
 function boot() {
+  if ($('#excelExportPanel')) {
+    if (bootRetryTimer) clearTimeout(bootRetryTimer);
+    bootRetryTimer = null;
+    return true;
+  }
+
   const host = $('#feature-tools-host');
-  if (!host || $('#excelExportPanel')) return;
+  if (!host) return false;
 
   const panel = document.createElement('section');
   panel.className = 'feature-panel';
@@ -198,6 +207,22 @@ function boot() {
   dateInput.value = /^\d{4}-\d{2}-\d{2}$/.test(shiftDate || '') ? shiftDate : currentLocalDate();
 
   $('#featureExcel').addEventListener('click', () => void exportExcel());
+  console.info('[Excel] Panel Xuất Excel đã được khởi tạo.');
+  return true;
 }
 
-boot();
+function scheduleBoot() {
+  if (boot()) return;
+  if (bootRetryTimer || bootAttempts >= MAX_BOOT_ATTEMPTS) return;
+  bootAttempts += 1;
+  bootRetryTimer = setTimeout(() => {
+    bootRetryTimer = null;
+    scheduleBoot();
+  }, 250);
+}
+
+scheduleBoot();
+document.addEventListener('DOMContentLoaded', scheduleBoot, { once: true });
+document.addEventListener('topping:features-ready', scheduleBoot);
+document.addEventListener('topping:session-ready', scheduleBoot);
+window.addEventListener('pageshow', scheduleBoot);
