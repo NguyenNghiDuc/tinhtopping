@@ -12,11 +12,19 @@ async function loadAuthenticatedFeatures() {
     if (error || !data?.session?.user) return;
 
     loaded = true;
-    await Promise.allSettled([
+    const results = await Promise.allSettled([
       import('./advanced.js'),
+      import('./advanced-tools.js'),
       import('./stats-all-employees.js'),
       import('./pro-tools.js')
     ]);
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const names = ['advanced.js', 'advanced-tools.js', 'stats-all-employees.js', 'pro-tools.js'];
+        console.error(`Không tải được ${names[index]}.`, result.reason);
+      }
+    });
   } finally {
     loading = false;
   }
