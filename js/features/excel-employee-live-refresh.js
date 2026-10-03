@@ -1,3 +1,4 @@
+import './day-delete.js';
 import { requireSupabase } from '../supabase.js';
 
 let refreshTimer = null;
