@@ -15,6 +15,20 @@
   <link rel="stylesheet" href="./public/css/statistics-polish.css">
   <link rel="stylesheet" href="./public/css/pro-tools.css">
   <script>
+    // Core-stability mode: never let an old PWA/service-worker cache control the app.
+    // This is especially important in GitHub Codespaces where the same forwarded port
+    // can keep an old worker alive after many development iterations.
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations()
+        .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
+        .catch(() => undefined);
+    }
+    if ('caches' in window) {
+      caches.keys()
+        .then((keys) => Promise.all(keys.filter((key) => key.startsWith('tinhtopping-')).map((key) => caches.delete(key))))
+        .catch(() => undefined);
+    }
+
     if (!location.hostname.endsWith('.app.github.dev')) {
       const manifest = document.createElement('link');
       manifest.rel = 'manifest';
