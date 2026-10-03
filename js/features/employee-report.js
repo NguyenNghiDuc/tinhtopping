@@ -22,13 +22,18 @@ function currentMonth() {
 }
 
 function currentIsoWeek() {
-  const date = new Date();
-  const local = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  const day = local.getUTCDay() || 7;
-  local.setUTCDate(local.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(local.getUTCFullYear(), 0, 1));
-  const week = Math.ceil((((local - yearStart) / 86400000) + 1) / 7);
-  return `${local.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+  const now = new Date();
+  const utcDate = new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+  const dayOfWeek = utcDate.getUTCDay() || 7;
+
+  utcDate.setUTCDate(utcDate.getUTCDate() + 4 - dayOfWeek);
+
+  const isoYear = utcDate.getUTCFullYear();
+  const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+  const elapsedDays = Math.floor((utcDate.getTime() - yearStart.getTime()) / 86400000) + 1;
+  const weekNumber = Math.ceil(elapsedDays / 7);
+
+  return `${isoYear}-W${String(weekNumber).padStart(2, '0')}`;
 }
 
 function weekBounds(value) {
@@ -37,16 +42,27 @@ function weekBounds(value) {
 
   const year = Number(match[1]);
   const week = Number(match[2]);
-  if (week < 1 || week > 53) return null;
+  if (!Number.isInteger(year) || !Number.isInteger(week) || week < 1 || week > 53) return null;
 
-  const jan4 = new Date(Date.UTC(year, 0, 4));
-  const jan4Day = jan4.getUTCDay() || 7;
-  const monday = new Date(jan4);
-  monday.setUTCDate(jan4.getUTCDate() - jan4Day + 1 + (week - 1) * 7);
+  const januaryFourth = new Date(Date.UTC(year, 0, 4));
+  const januaryFourthDay = januaryFourth.getUTCDay() || 7;
+  const monday = new Date(januaryFourth);
+  monday.setUTCDate(januaryFourth.getUTCDate() - januaryFourthDay + 1 + (week - 1) * 7);
+
   const sunday = new Date(monday);
   sunday.setUTCDate(monday.getUTCDate() + 6);
 
   return [monday.toISOString().slice(0, 10), sunday.toISOString().slice(0, 10)];
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[char]));
 }
 
 async function loadToppingPrice() {
@@ -57,8 +73,9 @@ async function loadToppingPrice() {
       .eq('id', true)
       .maybeSingle();
 
-    if (!result.error && Number(result.data?.topping_price) > 0) {
-      toppingPrice = Number(result.data.topping_price);
+    const configuredPrice = Number(result.data?.topping_price);
+    if (!result.error && Number.isFinite(configuredPrice) && configuredPrice > 0) {
+      toppingPrice = configuredPrice;
     }
   } catch (error) {
     console.warn('Không tải được giá topping cho báo cáo.', error);
@@ -69,30 +86,36 @@ async function getPeriodRows() {
   const mode = $('#employeeReportPeriod')?.value || 'month';
 
   if (mode === 'day') {
-    const date = $('#employeeReportDate')?.value;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return [];
-    return (await fetchMonthRows(date.slice(0, 7))).filter((row) => row.sales_date === date);
+    const date = $('#employeeReportDate')?.value || '';
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return [];
+
+    const rows = await fetchMonthRows(date.slice(0, 7));
+    return rows.filter((row) => row.sales_date === date);
   }
 
   if (mode === 'week') {
-    const bounds = weekBounds($('#employeeReportWeek')?.value);
+    const bounds = weekBounds($('#employeeReportWeek')?.value || '');
     if (!bounds) return [];
 
     const [start, end] = bounds;
     const startMonth = start.slice(0, 7);
     const endMonth = end.slice(0, 7);
-    const rows = [...await fetchMonthRows(startMonth)];
+    const rows = await fetchMonthRows(startMonth);
 
-    if (endMonth !== startMonth) rows.push(...await fetchMonthRows(endMonth));
+    if (endMonth !== startMonth) {
+      rows.push(...await fetchMonthRows(endMonth));
+    }
+
     return rows.filter((row) => row.sales_date >= start && row.sales_date <= end);
   }
 
-  const month = $('#employeeReportMonth')?.value;
-  return /^\d{4}-\d{2}$/.test(month || '') ? fetchMonthRows(month) : [];
+  const month = $('#employeeReportMonth')?.value || '';
+  if (!/^\d{4}-\d{2}$/.test(month)) return [];
+  return fetchMonthRows(month);
 }
 
 function employeeKey(row) {
-  return row.employee_id || row.employees?.name || '';
+  return String(row.employee_id || row.employees?.name || '');
 }
 
 async function refreshOptions() {
@@ -102,21 +125,21 @@ async function refreshOptions() {
   try {
     currentRows = await getPeriodRows();
     const previous = select.value;
-    const map = new Map();
+    const employees = new Map();
 
     for (const row of currentRows) {
-      const key = employeeKey(row);
+      const id = employeeKey(row);
       const name = row.employees?.name || 'Không rõ';
-      if (key && !map.has(key)) map.set(key, name);
+      if (id && !employees.has(id)) employees.set(id, name);
     }
 
-    const options = [...map.entries()].sort((a, b) => a[1].localeCompare(b[1], 'vi'));
+    const options = [...employees.entries()].sort((a, b) => a[1].localeCompare(b[1], 'vi'));
+
     select.innerHTML = '<option value="">Chọn nhân viên</option>' + options
-      .map(([id, name]) => `<option value="${String(id).replace(/"/g, '&quot;')}">${name}</option>`)
+      .map(([id, name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`)
       .join('');
 
-    if (options.some(([id]) => String(id) === previous)) select.value = previous;
-    else select.value = '';
+    select.value = options.some(([id]) => id === previous) ? previous : '';
 
     const output = $('#employeeReportOutput');
     if (output) output.innerHTML = '<p class="muted">Chọn nhân viên rồi bấm “Xem báo cáo”.</p>';
@@ -139,46 +162,55 @@ async function loadReport() {
   output.innerHTML = '<p class="muted">Đang tải...</p>';
 
   try {
-    // Luôn đọc lại kỳ hiện tại để báo cáo không dùng dữ liệu cũ.
     currentRows = await getPeriodRows();
-    const rows = currentRows.filter((row) => String(employeeKey(row)) === select.value);
-    const total = rows.reduce((sum, row) => sum + rowQuantity(row), 0);
-    const totalMoney = total * toppingPrice;
+    const rows = currentRows.filter((row) => employeeKey(row) === select.value);
+    const totalToppings = rows.reduce((sum, row) => sum + rowQuantity(row), 0);
+    const totalMoney = totalToppings * toppingPrice;
     const employeeName = rows[0]?.employees?.name || select.selectedOptions[0]?.textContent || '';
+
+    const tableRows = rows.map((row) => {
+      const quantity = rowQuantity(row);
+      const date = String(row.sales_date || '').split('-').reverse().join('/');
+      const shift = SHIFT_LABELS[row.shift] || row.shift || '';
+
+      return `<tr>
+        <td>${escapeHtml(date)}</td>
+        <td>${escapeHtml(shift)}</td>
+        <td class="numeric">${quantity.toLocaleString('vi-VN')}</td>
+        <td class="numeric">${money(quantity * toppingPrice)}</td>
+      </tr>`;
+    }).join('');
 
     output.innerHTML = `
       <div class="feature-report-summary">
-        <div><span>Nhân viên</span><strong>${employeeName}</strong></div>
+        <div><span>Nhân viên</span><strong>${escapeHtml(employeeName)}</strong></div>
         <div><span>Số ca</span><strong>${rows.length}</strong></div>
-        <div><span>Tổng topping</span><strong>${total.toLocaleString('vi-VN')}</strong></div>
+        <div><span>Tổng topping</span><strong>${totalToppings.toLocaleString('vi-VN')}</strong></div>
         <div><span>Tổng tiền</span><strong>${money(totalMoney)}</strong></div>
       </div>
       <div class="table-scroll">
         <table class="data-table compact-table">
-          <thead><tr><th>Ngày</th><th>Ca</th><th class="numeric">Topping</th><th class="numeric">Tiền</th></tr></thead>
-          <tbody>
-            ${rows.map((row) => {
-              const quantity = rowQuantity(row);
-              return `<tr><td>${row.sales_date.split('-').reverse().join('/')}</td><td>${SHIFT_LABELS[row.shift] || row.shift}</td><td class="numeric">${quantity.toLocaleString('vi-VN')}</td><td class="numeric">${money(quantity * toppingPrice)}</td></tr>`;
-            }).join('') || '<tr><td colspan="4">Chưa có dữ liệu.</td></tr>'}
-          </tbody>
+          <thead>
+            <tr><th>Ngày</th><th>Ca</th><th class="numeric">Topping</th><th class="numeric">Tiền</th></tr>
+          </thead>
+          <tbody>${tableRows || '<tr><td colspan="4">Chưa có dữ liệu.</td></tr>'}</tbody>
         </table>
       </div>`;
   } catch (error) {
     console.error('Không tải được báo cáo nhân viên.', error);
-    output.innerHTML = `<p class="muted">${error?.message || 'Không tải được báo cáo.'}</p>`;
+    output.innerHTML = `<p class="muted">${escapeHtml(error?.message || 'Không tải được báo cáo.')}</p>`;
   }
 }
 
 function syncPeriodControls() {
   const mode = $('#employeeReportPeriod')?.value || 'month';
-  const month = $('#employeeReportMonth');
-  const week = $('#employeeReportWeek');
-  const date = $('#employeeReportDate');
+  const monthInput = $('#employeeReportMonth');
+  const weekInput = $('#employeeReportWeek');
+  const dateInput = $('#employeeReportDate');
 
-  if (month) month.hidden = mode !== 'month';
-  if (week) week.hidden = mode !== 'week';
-  if (date) date.hidden = mode !== 'day';
+  if (monthInput) monthInput.hidden = mode !== 'month';
+  if (weekInput) weekInput.hidden = mode !== 'week';
+  if (dateInput) dateInput.hidden = mode !== 'day';
 
   void refreshOptions();
 }
@@ -188,6 +220,7 @@ function init() {
 
   const statsPanel = $('#view-statistics .stats-panel');
   if (!statsPanel) return;
+
   if ($('#employeeReportPanel')) {
     document.body.dataset.featureEmployeeReport = '1';
     return;
@@ -213,7 +246,12 @@ function init() {
   panel.id = 'employeeReportPanel';
   panel.className = 'feature-report-panel';
   panel.innerHTML = `
-    <div class="panel-title"><div><h3>Báo cáo chi tiết nhân viên</h3><p class="muted">Xem theo ngày, tuần hoặc tháng.</p></div></div>
+    <div class="panel-title">
+      <div>
+        <h3>Báo cáo chi tiết nhân viên</h3>
+        <p class="muted">Xem theo ngày, tuần hoặc tháng.</p>
+      </div>
+    </div>
     <div class="feature-report-controls">
       <label>Kỳ
         <select id="employeeReportPeriod">
@@ -231,12 +269,15 @@ function init() {
       <button type="button" id="loadEmployeeReport" class="feature-btn">Xem báo cáo</button>
     </div>
     <div id="employeeReportOutput"><p class="muted">Đang chuẩn bị dữ liệu...</p></div>`;
+
   statsPanel.appendChild(panel);
 
   $('#employeeReportPeriod')?.addEventListener('change', syncPeriodControls);
-  ['employeeReportMonth', 'employeeReportWeek', 'employeeReportDate'].forEach((id) => {
+
+  for (const id of ['employeeReportMonth', 'employeeReportWeek', 'employeeReportDate']) {
     $(`#${id}`)?.addEventListener('change', () => void refreshOptions());
-  });
+  }
+
   $('#loadEmployeeReport')?.addEventListener('click', () => void loadReport());
 
   void (async () => {
