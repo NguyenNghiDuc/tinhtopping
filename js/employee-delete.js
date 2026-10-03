@@ -1,6 +1,4 @@
 import { requireSupabase } from './supabase.js';
-import './convenience.js';
-import './convenience-day-delete.js';
 
 (() => {
   const deletedEmployeeIds = new Set();
