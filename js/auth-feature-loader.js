@@ -18,7 +18,7 @@ const AUTH_FEATURE_MODULES = [
   './features/employee-report.js',
   './features/employee-delete.js',
   './features/settings-page.js',
-  './features/dashboard-insights.js?v=employee-bars-20261004',
+  './features/dashboard-insights.js?v=employee-bars-mobile-20261004-2',
   './features/history-operations.js',
   './features/export-excel.js',
   './features/excel-employee-live-refresh.js',
