@@ -29,22 +29,32 @@ function currentLocalDate() {
   return `${year}-${month}-${day}`;
 }
 
+function currentLocalMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
 function formatDate(isoDate) {
   const [y, m, d] = String(isoDate || '').split('-');
   return y && m && d ? `${d}/${m}/${y}` : String(isoDate || '');
 }
 
-async function fetchAllShifts(client, date) {
+function formatMonth(month) {
+  const [y, m] = String(month || '').split('-');
+  return y && m ? `${m}/${y}` : String(month || '');
+}
+
+function monthBounds(month) {
+  const [year, monthNumber] = String(month).split('-').map(Number);
+  const nextYear = monthNumber === 12 ? year + 1 : year;
+  const nextMonth = monthNumber === 12 ? 1 : monthNumber + 1;
+  return [`${month}-01`, `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`];
+}
+
+async function fetchPagedShifts(buildQuery) {
   const all = [];
   for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await client
-      .from('shifts')
-      .select('id,sales_date,shift,employee_id,note')
-      .eq('sales_date', date)
-      .order('shift', { ascending: true })
-      .order('id', { ascending: true })
-      .range(from, from + PAGE_SIZE - 1);
-
+    const { data, error } = await buildQuery().range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
     all.push(...(data || []));
     if (!data || data.length < PAGE_SIZE) break;
@@ -52,9 +62,30 @@ async function fetchAllShifts(client, date) {
   return all;
 }
 
+async function fetchAllShiftsForDate(client, date) {
+  return fetchPagedShifts(() => client
+    .from('shifts')
+    .select('id,sales_date,shift,employee_id,note')
+    .eq('sales_date', date)
+    .order('sales_date', { ascending: true })
+    .order('shift', { ascending: true })
+    .order('id', { ascending: true }));
+}
+
+async function fetchAllShiftsForMonth(client, month) {
+  const [start, end] = monthBounds(month);
+  return fetchPagedShifts(() => client
+    .from('shifts')
+    .select('id,sales_date,shift,employee_id,note')
+    .gte('sales_date', start)
+    .lt('sales_date', end)
+    .order('sales_date', { ascending: true })
+    .order('shift', { ascending: true })
+    .order('id', { ascending: true }));
+}
+
 async function fetchByIds(client, table, columns, key, ids) {
   if (!ids.length) return [];
-
   const all = [];
   for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
     const idChunk = ids.slice(i, i + CHUNK_SIZE);
@@ -65,11 +96,9 @@ async function fetchByIds(client, table, columns, key, ids) {
   return all;
 }
 
-async function loadExcelRows(date) {
-  const client = requireSupabase();
-  const shifts = await fetchAllShifts(client, date);
+async function hydrateRows(shifts) {
   if (!shifts.length) return [];
-
+  const client = requireSupabase();
   const employeeIds = [...new Set(shifts.map((row) => row.employee_id).filter(Boolean))];
   const shiftIds = shifts.map((row) => row.id).filter(Boolean);
 
@@ -80,12 +109,8 @@ async function loadExcelRows(date) {
 
   const employeeMap = new Map(employees.map((row) => [row.id, row.name]));
   const quantityMap = new Map();
-
   toppings.forEach((row) => {
-    quantityMap.set(
-      row.shift_id,
-      (quantityMap.get(row.shift_id) || 0) + Math.max(0, Number(row.quantity) || 0)
-    );
+    quantityMap.set(row.shift_id, (quantityMap.get(row.shift_id) || 0) + Math.max(0, Number(row.quantity) || 0));
   });
 
   return shifts.map((row) => {
@@ -101,22 +126,25 @@ async function loadExcelRows(date) {
   });
 }
 
-function buildWorkbook(rows, date) {
+async function loadExcelRowsForDate(date) {
+  const client = requireSupabase();
+  return hydrateRows(await fetchAllShiftsForDate(client, date));
+}
+
+async function loadExcelRowsForMonth(month) {
+  const client = requireSupabase();
+  return hydrateRows(await fetchAllShiftsForMonth(client, month));
+}
+
+function buildWorkbook(rows, title, sheetName) {
   const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
   const totalMoney = rows.reduce((sum, row) => sum + row.money, 0);
 
   return buildXlsxBlob({
-    sheetName: `Topping ${formatDate(date)}`,
-    title: `BÁO CÁO TOPPING NGÀY ${formatDate(date)}`,
+    sheetName,
+    title,
     headers: ['Ngày', 'Ca', 'Nhân viên', 'Topping', 'Tiền', 'Ghi chú'],
-    rows: rows.map((row) => [
-      formatDate(row.date),
-      row.shift,
-      row.employee,
-      row.quantity,
-      row.money,
-      row.note
-    ]),
+    rows: rows.map((row) => [formatDate(row.date), row.shift, row.employee, row.quantity, row.money, row.note]),
     totals: ['Tổng cộng', '', '', totalQuantity, totalMoney, ''],
     widths: [13, 12, 24, 11, 14, 36]
   });
@@ -143,17 +171,12 @@ function clearOldObjectUrl() {
 function createDownload(filename, blob, summary) {
   const host = $('#excelExportResult');
   if (!host) throw new Error('Không tìm thấy vùng tải file Excel.');
-
   clearOldObjectUrl();
 
   const url = URL.createObjectURL(blob);
   host.dataset.objectUrl = url;
 
-  const box = setStatus(
-    `<strong>Đã tạo file Excel.</strong><br><span>${esc(summary)}</span><br><span>Nếu file chưa tự tải, bấm nút bên dưới.</span><br>`,
-    'ok'
-  );
-
+  const box = setStatus(`<strong>Đã tạo file Excel.</strong><br><span>${esc(summary)}</span><br>`, 'ok');
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
@@ -162,34 +185,24 @@ function createDownload(filename, blob, summary) {
   link.style.cssText = 'display:inline-flex;align-items:center;margin-top:10px;text-decoration:none';
   link.textContent = `⬇ Tải ${filename}`;
   box?.appendChild(link);
-
   return link;
 }
 
-async function exportExcel(button = $('#featureExcel')) {
+async function runExport({ button, rowsLoader, filename, label, workbookTitle, sheetName }) {
   if (!button || exportInProgress) return;
   exportInProgress = true;
-
-  const dateInput = $('#excelDate');
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(dateInput?.value || '')
-    ? dateInput.value
-    : currentLocalDate();
-
-  const filename = `topping-${date}.xlsx`;
   const oldText = button.textContent;
-
   button.disabled = true;
-  button.textContent = 'Đang lấy dữ liệu...';
-  setStatus(`<strong>Đã nhận lệnh Xuất Excel.</strong><br>1/3 · Đang lấy dữ liệu ngày ${esc(formatDate(date))}...`);
+  document.querySelectorAll('#featureExcelDay,#featureExcelMonth').forEach((item) => { item.disabled = true; });
 
   try {
-    console.info('[Excel] CLICK OK - bắt đầu lấy dữ liệu ngày', date);
-    const rows = await loadExcelRows(date);
-    console.info('[Excel] Số dòng lấy được', rows.length);
+    button.textContent = 'Đang lấy dữ liệu...';
+    setStatus(`<strong>Đã nhận lệnh xuất Excel.</strong><br>1/3 · Đang lấy dữ liệu ${esc(label)}...`);
+    const rows = await rowsLoader();
 
     if (!rows.length) {
-      setStatus(`<strong>Ngày ${esc(formatDate(date))} chưa có dữ liệu để xuất.</strong><br>Hãy chọn ngày có nhập topping.`);
-      notify(`Ngày ${formatDate(date)} chưa có dữ liệu để xuất.`, 5000);
+      setStatus(`<strong>${esc(label)} chưa có dữ liệu để xuất.</strong>`);
+      notify(`${label} chưa có dữ liệu để xuất.`, 5000);
       return;
     }
 
@@ -197,31 +210,23 @@ async function exportExcel(button = $('#featureExcel')) {
     setStatus('2/3 · Đang tạo file .xlsx...');
 
     const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
-    const blob = buildWorkbook(rows, date);
+    const blob = buildWorkbook(rows, workbookTitle, sheetName);
     const summary = `${rows.length} dòng, tổng ${totalQuantity.toLocaleString('vi-VN')} topping.`;
     const link = createDownload(filename, blob, summary);
 
     button.textContent = 'Đang tải file...';
-    try {
-      link.click();
-    } catch (error) {
-      console.warn('[Excel] Trình duyệt chặn tải tự động; dùng nút tải thủ công.', error);
-    }
+    try { link.click(); } catch (error) { console.warn('[Excel] Tải tự động bị chặn.', error); }
 
-    const finalHost = $('#excelExportResult');
-    const finalBox = setStatus(
-      `<strong>3/3 · Đã tạo file Excel.</strong><br><span>${esc(summary)}</span><br><span>Nếu Chrome chưa tải file, bấm nút tải bên dưới.</span><br>`,
-      'ok'
-    );
-    const manualLink = document.createElement('a');
-    manualLink.href = finalHost?.dataset.objectUrl || link.href;
-    manualLink.download = filename;
-    manualLink.rel = 'noopener';
-    manualLink.className = 'feature-btn primary';
-    manualLink.style.cssText = 'display:inline-flex;align-items:center;margin-top:10px;text-decoration:none';
-    manualLink.textContent = `⬇ Tải ${filename}`;
-    finalBox?.appendChild(manualLink);
-
+    const host = $('#excelExportResult');
+    const box = setStatus(`<strong>3/3 · Đã tạo file Excel.</strong><br><span>${esc(summary)}</span><br>`, 'ok');
+    const manual = document.createElement('a');
+    manual.href = host?.dataset.objectUrl || link.href;
+    manual.download = filename;
+    manual.rel = 'noopener';
+    manual.className = 'feature-btn primary';
+    manual.style.cssText = 'display:inline-flex;align-items:center;margin-top:10px;text-decoration:none';
+    manual.textContent = `⬇ Tải ${filename}`;
+    box?.appendChild(manual);
     notify(`Đã tạo ${filename}`, 4000);
   } catch (error) {
     console.error('[Excel] Xuất file thất bại.', error);
@@ -230,22 +235,56 @@ async function exportExcel(button = $('#featureExcel')) {
     notify(`Xuất Excel lỗi: ${message}`, 6000);
   } finally {
     exportInProgress = false;
-    button.disabled = false;
     button.textContent = oldText;
+    document.querySelectorAll('#featureExcelDay,#featureExcelMonth').forEach((item) => { item.disabled = false; });
   }
 }
 
+function exportDay(button) {
+  const dateInput = $('#excelDate');
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(dateInput?.value || '') ? dateInput.value : currentLocalDate();
+  return runExport({
+    button,
+    rowsLoader: () => loadExcelRowsForDate(date),
+    filename: `topping-ngay-${date}.xlsx`,
+    label: `ngày ${formatDate(date)}`,
+    workbookTitle: `BÁO CÁO TOPPING NGÀY ${formatDate(date)}`,
+    sheetName: `Topping ${formatDate(date)}`
+  });
+}
+
+function exportMonth(button) {
+  const monthInput = $('#excelMonth');
+  const month = /^\d{4}-\d{2}$/.test(monthInput?.value || '') ? monthInput.value : currentLocalMonth();
+  return runExport({
+    button,
+    rowsLoader: () => loadExcelRowsForMonth(month),
+    filename: `topping-thang-${month}.xlsx`,
+    label: `tháng ${formatMonth(month)}`,
+    workbookTitle: `BÁO CÁO TOPPING THÁNG ${formatMonth(month)}`,
+    sheetName: `Topping ${formatMonth(month)}`
+  });
+}
+
 function installDelegatedClickHandler() {
-  if (document.documentElement.dataset.excelDelegatedClick === '1') return;
-  document.documentElement.dataset.excelDelegatedClick = '1';
+  if (document.documentElement.dataset.excelDelegatedClick === '2') return;
+  document.documentElement.dataset.excelDelegatedClick = '2';
 
   document.addEventListener('click', (event) => {
-    const button = event.target.closest?.('#featureExcel');
-    if (!button) return;
-    event.preventDefault();
-    event.stopPropagation();
-    console.info('[Excel] Nút Xuất Excel được bấm - delegated handler.');
-    void exportExcel(button);
+    const dayButton = event.target.closest?.('#featureExcelDay');
+    if (dayButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      void exportDay(dayButton);
+      return;
+    }
+
+    const monthButton = event.target.closest?.('#featureExcelMonth');
+    if (monthButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      void exportMonth(monthButton);
+    }
   }, true);
 }
 
@@ -266,20 +305,40 @@ function boot() {
   panel.id = 'excelExportPanel';
   panel.innerHTML = `
     <h3>Xuất Excel</h3>
-    <p class="muted">Bản test click: chọn ngày có dữ liệu rồi bấm Xuất Excel.</p>
-    <div class="feature-toolbar">
-      <label>Ngày / tháng / năm<input id="excelDate" type="date"></label>
-      <button class="feature-btn primary" id="featureExcel" type="button">Xuất Excel</button>
+    <p class="muted">Có thể xuất riêng 1 ngày hoặc toàn bộ 1 tháng.</p>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">
+      <div class="feature-card">
+        <strong style="font-size:16px;margin-bottom:10px">Xuất 1 ngày</strong>
+        <div class="feature-toolbar">
+          <label>Ngày / tháng / năm<input id="excelDate" type="date"></label>
+          <button class="feature-btn primary" id="featureExcelDay" type="button">Xuất 1 ngày</button>
+        </div>
+      </div>
+      <div class="feature-card">
+        <strong style="font-size:16px;margin-bottom:10px">Xuất 1 tháng</strong>
+        <div class="feature-toolbar">
+          <label>Tháng<input id="excelMonth" type="month"></label>
+          <button class="feature-btn primary" id="featureExcelMonth" type="button">Xuất 1 tháng</button>
+        </div>
+      </div>
     </div>
     <div id="excelExportResult" style="margin-top:12px" hidden></div>
   `;
   host.prepend(panel);
 
-  const dateInput = $('#excelDate');
-  dateInput.value = currentLocalDate();
-
-  console.info('[Excel] Bản test click đã sẵn sàng.');
+  $('#excelDate').value = currentLocalDate();
+  $('#excelMonth').value = currentLocalMonth();
   return true;
+}
+
+function scheduleBoot() {
+  if (boot()) return;
+  if (bootRetryTimer || bootAttempts >= MAX_BOOT_ATTEMPTS) return;
+  bootAttempts += 1;
+  bootRetryTimer = setTimeout(() => {
+    bootRetryTimer = null;
+    scheduleBoot();
+  }, 250);
 }
 
 installDelegatedClickHandler();
@@ -288,14 +347,3 @@ document.addEventListener('DOMContentLoaded', scheduleBoot, { once: true });
 document.addEventListener('topping:features-ready', scheduleBoot);
 document.addEventListener('topping:session-ready', scheduleBoot);
 window.addEventListener('pageshow', scheduleBoot);
-
-function scheduleBoot() {
-  if (boot()) return;
-  if (bootRetryTimer || bootAttempts >= MAX_BOOT_ATTEMPTS) return;
-
-  bootAttempts += 1;
-  bootRetryTimer = setTimeout(() => {
-    bootRetryTimer = null;
-    scheduleBoot();
-  }, 250);
-}
