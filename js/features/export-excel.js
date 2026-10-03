@@ -51,6 +51,17 @@ function monthBounds(month) {
   return [`${month}-01`, `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`];
 }
 
+function safeFilename(value) {
+  return String(value || 'nhan-vien')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .replace(/[^a-zA-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .toLowerCase() || 'nhan-vien';
+}
+
 async function fetchPagedShifts(buildQuery) {
   const all = [];
   for (let from = 0; ; from += PAGE_SIZE) {
@@ -84,6 +95,19 @@ async function fetchAllShiftsForMonth(client, month) {
     .order('id', { ascending: true }));
 }
 
+async function fetchAllShiftsForEmployeeMonth(client, month, employeeId) {
+  const [start, end] = monthBounds(month);
+  return fetchPagedShifts(() => client
+    .from('shifts')
+    .select('id,sales_date,shift,employee_id,note')
+    .eq('employee_id', employeeId)
+    .gte('sales_date', start)
+    .lt('sales_date', end)
+    .order('sales_date', { ascending: true })
+    .order('shift', { ascending: true })
+    .order('id', { ascending: true }));
+}
+
 async function fetchByIds(client, table, columns, key, ids) {
   if (!ids.length) return [];
   const all = [];
@@ -107,7 +131,7 @@ async function hydrateRows(shifts) {
     fetchByIds(client, 'shift_toppings', 'shift_id,quantity', 'shift_id', shiftIds)
   ]);
 
-  const employeeMap = new Map(employees.map((row) => [row.id, row.name]));
+  const employeeMap = new Map(employees.map((row) => [String(row.id), row.name]));
   const quantityMap = new Map();
   toppings.forEach((row) => {
     quantityMap.set(row.shift_id, (quantityMap.get(row.shift_id) || 0) + Math.max(0, Number(row.quantity) || 0));
@@ -118,7 +142,8 @@ async function hydrateRows(shifts) {
     return {
       date: row.sales_date,
       shift: SHIFT_LABELS[row.shift] || row.shift || '',
-      employee: employeeMap.get(row.employee_id) || '',
+      employeeId: row.employee_id,
+      employee: employeeMap.get(String(row.employee_id)) || '',
       quantity,
       money: quantity * 1000,
       note: row.note || ''
@@ -134,6 +159,11 @@ async function loadExcelRowsForDate(date) {
 async function loadExcelRowsForMonth(month) {
   const client = requireSupabase();
   return hydrateRows(await fetchAllShiftsForMonth(client, month));
+}
+
+async function loadExcelRowsForEmployeeMonth(month, employeeId) {
+  const client = requireSupabase();
+  return hydrateRows(await fetchAllShiftsForEmployeeMonth(client, month, employeeId));
 }
 
 function buildWorkbook(rows, title, sheetName) {
@@ -192,8 +222,7 @@ async function runExport({ button, rowsLoader, filename, label, workbookTitle, s
   if (!button || exportInProgress) return;
   exportInProgress = true;
   const oldText = button.textContent;
-  button.disabled = true;
-  document.querySelectorAll('#featureExcelDay,#featureExcelMonth').forEach((item) => { item.disabled = true; });
+  document.querySelectorAll('#featureExcelDay,#featureExcelMonth,#featureExcelEmployeeMonth').forEach((item) => { item.disabled = true; });
 
   try {
     button.textContent = 'Đang lấy dữ liệu...';
@@ -210,8 +239,9 @@ async function runExport({ button, rowsLoader, filename, label, workbookTitle, s
     setStatus('2/3 · Đang tạo file .xlsx...');
 
     const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
+    const totalMoney = rows.reduce((sum, row) => sum + row.money, 0);
     const blob = buildWorkbook(rows, workbookTitle, sheetName);
-    const summary = `${rows.length} dòng, tổng ${totalQuantity.toLocaleString('vi-VN')} topping.`;
+    const summary = `${rows.length} ca, tổng ${totalQuantity.toLocaleString('vi-VN')} topping, ${totalMoney.toLocaleString('vi-VN')}đ.`;
     const link = createDownload(filename, blob, summary);
 
     button.textContent = 'Đang tải file...';
@@ -236,7 +266,7 @@ async function runExport({ button, rowsLoader, filename, label, workbookTitle, s
   } finally {
     exportInProgress = false;
     button.textContent = oldText;
-    document.querySelectorAll('#featureExcelDay,#featureExcelMonth').forEach((item) => { item.disabled = false; });
+    document.querySelectorAll('#featureExcelDay,#featureExcelMonth,#featureExcelEmployeeMonth').forEach((item) => { item.disabled = false; });
   }
 }
 
@@ -266,9 +296,55 @@ function exportMonth(button) {
   });
 }
 
+function exportEmployeeMonth(button) {
+  const employeeSelect = $('#excelEmployee');
+  const employeeId = employeeSelect?.value || '';
+  const employeeName = employeeSelect?.selectedOptions?.[0]?.textContent?.trim() || '';
+  const monthInput = $('#excelEmployeeMonth');
+  const month = /^\d{4}-\d{2}$/.test(monthInput?.value || '') ? monthInput.value : currentLocalMonth();
+
+  if (!employeeId) {
+    setStatus('<strong>Chọn nhân viên trước khi xuất.</strong>');
+    notify('Chọn nhân viên trước khi xuất.', 4000);
+    return;
+  }
+
+  return runExport({
+    button,
+    rowsLoader: () => loadExcelRowsForEmployeeMonth(month, employeeId),
+    filename: `topping-${safeFilename(employeeName)}-${month}.xlsx`,
+    label: `${employeeName} trong tháng ${formatMonth(month)}`,
+    workbookTitle: `BÁO CÁO TOPPING - ${employeeName.toUpperCase()} - THÁNG ${formatMonth(month)}`,
+    sheetName: `${employeeName} ${formatMonth(month)}`
+  });
+}
+
+async function loadEmployeeOptions() {
+  const select = $('#excelEmployee');
+  if (!select || select.dataset.loaded === '1') return;
+
+  try {
+    const { data, error } = await requireSupabase()
+      .from('employees')
+      .select('id,name,is_active')
+      .order('name', { ascending: true });
+
+    if (error) throw error;
+
+    const employees = (data || []).filter((employee) => employee?.id && employee?.name);
+    select.innerHTML = '<option value="">-- Chọn nhân viên --</option>' + employees
+      .map((employee) => `<option value="${esc(employee.id)}">${esc(employee.name)}${employee.is_active === false ? ' (đã nghỉ)' : ''}</option>`)
+      .join('');
+    select.dataset.loaded = '1';
+  } catch (error) {
+    console.error('[Excel] Không tải được danh sách nhân viên.', error);
+    select.innerHTML = '<option value="">Không tải được nhân viên</option>';
+  }
+}
+
 function installDelegatedClickHandler() {
-  if (document.documentElement.dataset.excelDelegatedClick === '2') return;
-  document.documentElement.dataset.excelDelegatedClick = '2';
+  if (document.documentElement.dataset.excelDelegatedClick === '3') return;
+  document.documentElement.dataset.excelDelegatedClick = '3';
 
   document.addEventListener('click', (event) => {
     const dayButton = event.target.closest?.('#featureExcelDay');
@@ -284,6 +360,14 @@ function installDelegatedClickHandler() {
       event.preventDefault();
       event.stopPropagation();
       void exportMonth(monthButton);
+      return;
+    }
+
+    const employeeButton = event.target.closest?.('#featureExcelEmployeeMonth');
+    if (employeeButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      void exportEmployeeMonth(employeeButton);
     }
   }, true);
 }
@@ -294,6 +378,7 @@ function boot() {
   if ($('#excelExportPanel')) {
     if (bootRetryTimer) clearTimeout(bootRetryTimer);
     bootRetryTimer = null;
+    void loadEmployeeOptions();
     return true;
   }
 
@@ -305,8 +390,8 @@ function boot() {
   panel.id = 'excelExportPanel';
   panel.innerHTML = `
     <h3>Xuất Excel</h3>
-    <p class="muted">Có thể xuất riêng 1 ngày hoặc toàn bộ 1 tháng.</p>
-    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px">
+    <p class="muted">Xuất theo ngày, theo tháng hoặc riêng từng nhân viên trong tháng.</p>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px">
       <div class="feature-card">
         <strong style="font-size:16px;margin-bottom:10px">Xuất 1 ngày</strong>
         <div class="feature-toolbar">
@@ -321,6 +406,14 @@ function boot() {
           <button class="feature-btn primary" id="featureExcelMonth" type="button">Xuất 1 tháng</button>
         </div>
       </div>
+      <div class="feature-card">
+        <strong style="font-size:16px;margin-bottom:10px">Xuất từng nhân viên</strong>
+        <div class="feature-toolbar">
+          <label>Nhân viên<select id="excelEmployee"><option value="">Đang tải...</option></select></label>
+          <label>Tháng<input id="excelEmployeeMonth" type="month"></label>
+          <button class="feature-btn primary" id="featureExcelEmployeeMonth" type="button">Xuất nhân viên</button>
+        </div>
+      </div>
     </div>
     <div id="excelExportResult" style="margin-top:12px" hidden></div>
   `;
@@ -328,6 +421,8 @@ function boot() {
 
   $('#excelDate').value = currentLocalDate();
   $('#excelMonth').value = currentLocalMonth();
+  $('#excelEmployeeMonth').value = currentLocalMonth();
+  void loadEmployeeOptions();
   return true;
 }
 
