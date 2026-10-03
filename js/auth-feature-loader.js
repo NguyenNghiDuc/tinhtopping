@@ -3,17 +3,22 @@ import { requireSupabase } from './supabase.js';
 let loaded = false;
 let loading = false;
 
-// Thứ tự cố định để mỗi nhóm tính năng hoàn tất trước khi nhóm kế tiếp gắn UI.
-// Tránh Promise.all khiến nhiều file cùng sửa DOM trong một thời điểm.
+// Chỉ load bộ module mới. Các file legacy (advanced/pro/productivity/batch-fix...)
+// vẫn được giữ trong repo để tham khảo nhưng không chạy, tránh trùng chức năng/observer.
 const FEATURE_MODULES = [
-  './batch-fix.js',
-  './employee-delete.js',
-  './productivity.js',
-  './advanced.js',
-  './stats-all-employees.js',
-  './pro-tools.js',
+  './features/feature-shell.js',
   './features/account-security.js',
-  './advanced-tools.js'
+  './features/editor-tools.js',
+  './features/offline-draft.js',
+  './features/employee-report.js',
+  './features/settings-page.js',
+  './features/dashboard-insights.js',
+  './features/history-operations.js',
+  './features/export-backup.js',
+  './features/audit-login.js',
+  './features/trash-recovery.js',
+  './features/system-health.js',
+  './features/ui-shortcuts.js'
 ];
 
 async function loadAuthenticatedFeatures() {
@@ -32,6 +37,7 @@ async function loadAuthenticatedFeatures() {
       }
     }
     loaded = true;
+    document.dispatchEvent(new CustomEvent('topping:features-ready'));
   } finally {
     loading = false;
   }
