@@ -323,22 +323,32 @@ async function loadEmployeeOptions() {
   const select = $('#excelEmployee');
   if (!select || select.dataset.loaded === '1') return;
 
+  select.innerHTML = '<option value="">Đang tải nhân viên...</option>';
+
   try {
     const { data, error } = await requireSupabase()
       .from('employees')
-      .select('id,name,is_active')
+      .select('id,name,active')
       .order('name', { ascending: true });
 
     if (error) throw error;
 
     const employees = (data || []).filter((employee) => employee?.id && employee?.name);
+    if (!employees.length) {
+      select.innerHTML = '<option value="">Chưa có nhân viên</option>';
+      return;
+    }
+
     select.innerHTML = '<option value="">-- Chọn nhân viên --</option>' + employees
-      .map((employee) => `<option value="${esc(employee.id)}">${esc(employee.name)}${employee.is_active === false ? ' (đã nghỉ)' : ''}</option>`)
+      .map((employee) => `<option value="${esc(employee.id)}">${esc(employee.name)}${employee.active === false ? ' (đã nghỉ)' : ''}</option>`)
       .join('');
     select.dataset.loaded = '1';
+    console.info(`[Excel] Đã tải ${employees.length} nhân viên vào danh sách xuất Excel.`);
   } catch (error) {
     console.error('[Excel] Không tải được danh sách nhân viên.', error);
+    const message = error?.message || 'Không rõ lỗi';
     select.innerHTML = '<option value="">Không tải được nhân viên</option>';
+    setStatus(`<strong>Không tải được danh sách nhân viên:</strong> ${esc(message)}`);
   }
 }
 
