@@ -3,13 +3,16 @@ import { requireSupabase } from './supabase.js';
 let loaded = false;
 let loading = false;
 
+// Thứ tự cố định để mỗi nhóm tính năng hoàn tất trước khi nhóm kế tiếp gắn UI.
+// Tránh Promise.all khiến nhiều file cùng sửa DOM trong một thời điểm.
 const FEATURE_MODULES = [
   './batch-fix.js',
   './employee-delete.js',
   './productivity.js',
   './advanced.js',
   './stats-all-employees.js',
-  './pro-tools.js'
+  './pro-tools.js',
+  './advanced-tools.js'
 ];
 
 async function loadAuthenticatedFeatures() {
@@ -20,16 +23,14 @@ async function loadAuthenticatedFeatures() {
     const { data, error } = await client.auth.getSession();
     if (error || !data?.session?.user) return;
 
-    loaded = true;
-    const results = await Promise.allSettled(
-      FEATURE_MODULES.map((modulePath) => import(modulePath))
-    );
-
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        console.error(`Không tải được ${FEATURE_MODULES[index]}.`, result.reason);
+    for (const modulePath of FEATURE_MODULES) {
+      try {
+        await import(modulePath);
+      } catch (error) {
+        console.error(`Không tải được ${modulePath}.`, error);
       }
-    });
+    }
+    loaded = true;
   } finally {
     loading = false;
   }
