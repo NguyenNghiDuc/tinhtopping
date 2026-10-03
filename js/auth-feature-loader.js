@@ -21,6 +21,7 @@ const AUTH_FEATURE_MODULES = [
   './features/dashboard-insights.js',
   './features/history-operations.js',
   './features/export-excel.js',
+  './features/excel-employee-live-refresh.js',
   './features/export-backup.js',
   './features/audit-login.js',
   './features/trash-recovery.js',
