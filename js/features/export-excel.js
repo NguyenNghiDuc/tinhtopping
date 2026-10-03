@@ -12,6 +12,7 @@ const PAGE_SIZE = 500;
 const CHUNK_SIZE = 50;
 let bootRetryTimer = null;
 let bootAttempts = 0;
+let exportInProgress = false;
 const MAX_BOOT_ATTEMPTS = 40;
 
 function esc(value) {
@@ -165,9 +166,9 @@ function createDownload(filename, blob, summary) {
   return link;
 }
 
-async function exportExcel() {
-  const button = $('#featureExcel');
-  if (!button) return;
+async function exportExcel(button = $('#featureExcel')) {
+  if (!button || exportInProgress) return;
+  exportInProgress = true;
 
   const dateInput = $('#excelDate');
   const date = /^\d{4}-\d{2}-\d{2}$/.test(dateInput?.value || '')
@@ -179,10 +180,10 @@ async function exportExcel() {
 
   button.disabled = true;
   button.textContent = 'Đang lấy dữ liệu...';
-  setStatus(`1/3 · Đang lấy dữ liệu ngày ${esc(formatDate(date))}...`);
+  setStatus(`<strong>Đã nhận lệnh Xuất Excel.</strong><br>1/3 · Đang lấy dữ liệu ngày ${esc(formatDate(date))}...`);
 
   try {
-    console.info('[Excel] 1/3 Bắt đầu lấy dữ liệu ngày', date);
+    console.info('[Excel] CLICK OK - bắt đầu lấy dữ liệu ngày', date);
     const rows = await loadExcelRows(date);
     console.info('[Excel] Số dòng lấy được', rows.length);
 
@@ -194,31 +195,24 @@ async function exportExcel() {
 
     button.textContent = 'Đang tạo file...';
     setStatus('2/3 · Đang tạo file .xlsx...');
-    console.info('[Excel] 2/3 Đang tạo workbook');
 
     const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
     const blob = buildWorkbook(rows, date);
     const summary = `${rows.length} dòng, tổng ${totalQuantity.toLocaleString('vi-VN')} topping.`;
-
     const link = createDownload(filename, blob, summary);
 
     button.textContent = 'Đang tải file...';
-    console.info('[Excel] 3/3 Đang kích hoạt tải file', filename);
-
     try {
       link.click();
     } catch (error) {
       console.warn('[Excel] Trình duyệt chặn tải tự động; dùng nút tải thủ công.', error);
     }
 
-    setStatus(
+    const finalHost = $('#excelExportResult');
+    const finalBox = setStatus(
       `<strong>3/3 · Đã tạo file Excel.</strong><br><span>${esc(summary)}</span><br><span>Nếu Chrome chưa tải file, bấm nút tải bên dưới.</span><br>`,
       'ok'
     );
-
-    // setStatus ở trên thay DOM nên dựng lại nút tải tay một lần nữa.
-    const finalHost = $('#excelExportResult');
-    const finalBox = finalHost?.firstElementChild;
     const manualLink = document.createElement('a');
     manualLink.href = finalHost?.dataset.objectUrl || link.href;
     manualLink.download = filename;
@@ -235,12 +229,29 @@ async function exportExcel() {
     setStatus(`<strong>Xuất Excel lỗi:</strong> ${esc(message)}`);
     notify(`Xuất Excel lỗi: ${message}`, 6000);
   } finally {
+    exportInProgress = false;
     button.disabled = false;
     button.textContent = oldText;
   }
 }
 
+function installDelegatedClickHandler() {
+  if (document.documentElement.dataset.excelDelegatedClick === '1') return;
+  document.documentElement.dataset.excelDelegatedClick = '1';
+
+  document.addEventListener('click', (event) => {
+    const button = event.target.closest?.('#featureExcel');
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    console.info('[Excel] Nút Xuất Excel được bấm - delegated handler.');
+    void exportExcel(button);
+  }, true);
+}
+
 function boot() {
+  installDelegatedClickHandler();
+
   if ($('#excelExportPanel')) {
     if (bootRetryTimer) clearTimeout(bootRetryTimer);
     bootRetryTimer = null;
@@ -255,7 +266,7 @@ function boot() {
   panel.id = 'excelExportPanel';
   panel.innerHTML = `
     <h3>Xuất Excel</h3>
-    <p class="muted">Bản thử đơn giản: chọn ngày có dữ liệu rồi bấm Xuất Excel.</p>
+    <p class="muted">Bản test click: chọn ngày có dữ liệu rồi bấm Xuất Excel.</p>
     <div class="feature-toolbar">
       <label>Ngày / tháng / năm<input id="excelDate" type="date"></label>
       <button class="feature-btn primary" id="featureExcel" type="button">Xuất Excel</button>
@@ -267,12 +278,16 @@ function boot() {
   const dateInput = $('#excelDate');
   dateInput.value = currentLocalDate();
 
-  const button = $('#featureExcel');
-  button.onclick = exportExcel;
-
-  console.info('[Excel] Bản đơn giản đã sẵn sàng.');
+  console.info('[Excel] Bản test click đã sẵn sàng.');
   return true;
 }
+
+installDelegatedClickHandler();
+scheduleBoot();
+document.addEventListener('DOMContentLoaded', scheduleBoot, { once: true });
+document.addEventListener('topping:features-ready', scheduleBoot);
+document.addEventListener('topping:session-ready', scheduleBoot);
+window.addEventListener('pageshow', scheduleBoot);
 
 function scheduleBoot() {
   if (boot()) return;
@@ -284,9 +299,3 @@ function scheduleBoot() {
     scheduleBoot();
   }, 250);
 }
-
-scheduleBoot();
-document.addEventListener('DOMContentLoaded', scheduleBoot, { once: true });
-document.addEventListener('topping:features-ready', scheduleBoot);
-document.addEventListener('topping:session-ready', scheduleBoot);
-window.addEventListener('pageshow', scheduleBoot);
