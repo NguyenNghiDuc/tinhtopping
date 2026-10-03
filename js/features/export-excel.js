@@ -243,6 +243,7 @@ function boot() {
 
   const dateInput = $('#excelDate');
   dateInput.value = currentLocalDate();
+  dateInput.addEventListener('change', () => dateInput.blur());
 
   const button = $('#featureExcel');
   button.onclick = () => void exportExcel();
