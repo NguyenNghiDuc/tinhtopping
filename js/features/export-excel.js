@@ -17,11 +17,38 @@ function esc(value) {
   })[char]);
 }
 
+function getLocalMonthValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+function getLocalDateValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function monthBounds(month) {
   const [year, monthNumber] = String(month).split('-').map(Number);
   const nextYear = monthNumber === 12 ? year + 1 : year;
   const nextMonth = monthNumber === 12 ? 1 : monthNumber + 1;
   return [`${month}-01`, `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`];
+}
+
+function resolveExportMonth() {
+  const explicit = $('#excelExportMonth')?.value || $('#recordsMonth')?.value || getLocalMonthValue();
+  if ($('#excelExportMonth')) $('#excelExportMonth').value = explicit;
+  return explicit;
+}
+
+function setExportStatus(message, tone = 'info') {
+  const status = $('#excelExportStatus');
+  if (!status) return;
+  status.textContent = message;
+  status.dataset.tone = tone;
+  status.hidden = !message;
 }
 
 async function loadExcelRows(month) {
@@ -73,41 +100,25 @@ async function loadExcelRows(month) {
   }));
 }
 
-function buildExcelHtml(rows, month) {
+function buildExcelCsv(rows, month) {
   const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
   const totalMoney = rows.reduce((sum, row) => sum + row.money, 0);
+  const exportDate = getLocalDateValue();
 
-  const body = rows.map((row) => `
-    <tr>
-      <td>${esc(row.date)}</td>
-      <td>${esc(row.shift)}</td>
-      <td>${esc(row.employee)}</td>
-      <td style="mso-number-format:'0'">${row.quantity}</td>
-      <td style="mso-number-format:'#,##0'">${row.money}</td>
-      <td>${esc(row.note)}</td>
-    </tr>
-  `).join('');
+  const escapeCsv = (value) => {
+    const stringValue = String(value ?? '');
+    const escaped = stringValue.replace(/"/g, '""');
+    return /[",\n]/.test(escaped) ? `"${escaped}"` : escaped;
+  };
 
-  return `<!doctype html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel">
-<head>
-  <meta charset="utf-8">
-  <meta name="ProgId" content="Excel.Sheet">
-  <style>
-    table{border-collapse:collapse;font-family:Arial,sans-serif}
-    th,td{border:1px solid #999;padding:6px 9px}
-    th{font-weight:700;background:#eef2ff}
-  </style>
-</head>
-<body>
-  <table>
-    <tr><th colspan="6">BÁO CÁO TOPPING THÁNG ${esc(month)}</th></tr>
-    <tr><th>Ngày</th><th>Ca</th><th>Nhân viên</th><th>Topping</th><th>Tiền</th><th>Ghi chú</th></tr>
-    ${body}
-    <tr><th colspan="3">Tổng cộng</th><th>${totalQuantity}</th><th>${totalMoney}</th><th></th></tr>
-  </table>
-</body>
-</html>`;
+  const lines = [
+    ['BÁO CÁO TOPPING THÁNG', month, `Xuất ngày ${exportDate}`],
+    ['Ngày', 'Ca', 'Nhân viên', 'Topping', 'Tiền', 'Ghi chú'],
+    ...rows.map((row) => [row.date, row.shift, row.employee, String(row.quantity), String(row.money), row.note || '']),
+    ['Tổng cộng', '', '', String(totalQuantity), String(totalMoney), '']
+  ];
+
+  return lines.map((line) => line.map(escapeCsv).join(',')).join('\n') + '\n';
 }
 
 function getResultHost() {
@@ -142,6 +153,7 @@ function renderDownloadButton(filename, blob) {
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
+  link.rel = 'noopener';
   link.className = 'feature-btn primary';
   link.style.display = 'inline-flex';
   link.style.marginTop = '10px';
@@ -150,6 +162,16 @@ function renderDownloadButton(filename, blob) {
 
   box.appendChild(link);
   host.appendChild(box);
+
+  setTimeout(() => {
+    try {
+      const popup = window.open(url, '_blank', 'noopener,noreferrer');
+      if (popup) popup.opener = null;
+    } catch (error) {
+      console.warn('Không mở tab tải dự phòng cho Excel.', error);
+    }
+  }, 250);
+
   return link;
 }
 
@@ -157,12 +179,14 @@ async function exportExcel() {
   const button = $('#featureExcel');
   if (!button) return;
 
-  const month = $('#recordsMonth')?.value || new Date().toISOString().slice(0, 7);
-  const filename = `topping-${month}.xls`;
+  const month = resolveExportMonth();
+  const exportDate = getLocalDateValue();
+  const filename = `topping-${month}-${exportDate}.csv`;
   const oldText = button.textContent;
 
   button.disabled = true;
   button.textContent = 'Đang tạo Excel...';
+  setExportStatus('Đang tạo file Excel...', 'info');
 
   try {
     console.info('[Excel] Bắt đầu xuất tháng', month);
@@ -170,29 +194,33 @@ async function exportExcel() {
     console.info('[Excel] Số dòng lấy được', rows.length);
 
     if (!rows.length) {
-      notify(`Tháng ${month} chưa có dữ liệu để xuất.`);
+      const message = `Tháng ${month} chưa có dữ liệu để xuất.`;
+      setExportStatus(message, 'warning');
+      notify(message);
       return;
     }
 
-    const blob = new Blob(['\ufeff', buildExcelHtml(rows, month)], {
-      type: 'application/vnd.ms-excel;charset=utf-8'
+    const csv = buildExcelCsv(rows, month);
+    const blob = new Blob(['\ufeff', csv], {
+      type: 'text/csv;charset=utf-8'
     });
 
     const link = renderDownloadButton(filename, blob);
 
-    // Desktop thường tải ngay. Nếu bị chặn thì nút tải thủ công vẫn luôn hiển thị.
     try {
       link.click();
     } catch (error) {
-      console.warn('[Excel] Trình duyệt chặn tải tự động.', error);
+      console.warn('[Excel] Trình duyệt chặn tải tự động, hiển thị nút tải thủ công.', error);
     }
 
+    setExportStatus('File đã được tạo. Nếu chưa tải xuống, bấm nút tải ngay bên dưới.', 'success');
     notify('Đã tạo file Excel. Nếu chưa tải xuống, bấm nút tải ngay bên dưới.');
   } catch (error) {
     console.error('[Excel] Xuất file thất bại.', error);
     const message = error?.message || 'Lỗi không xác định';
     const host = getResultHost();
     if (host) host.innerHTML = `<div class="feature-warning"><strong>Xuất Excel lỗi:</strong> ${esc(message)}</div>`;
+    setExportStatus(`Xuất Excel lỗi: ${message}`, 'error');
     notify(`Xuất Excel lỗi: ${message}`);
   } finally {
     button.disabled = false;
@@ -209,10 +237,14 @@ function boot() {
   panel.id = 'excelExportPanel';
   panel.innerHTML = `
     <h3>Xuất Excel</h3>
-    <p class="muted">Xuất dữ liệu tháng đang chọn thành file Excel riêng.</p>
+    <p class="muted">Xuất dữ liệu theo tháng đang chọn thành file Excel riêng.</p>
     <div class="feature-toolbar">
+      <label class="field-label" for="excelExportMonth">Tháng
+        <input id="excelExportMonth" type="month" value="${getLocalMonthValue()}">
+      </label>
       <button class="feature-btn primary" id="featureExcel" type="button">Xuất Excel</button>
     </div>
+    <div id="excelExportStatus" class="feature-status" hidden></div>
   `;
   host.prepend(panel);
   $('#featureExcel').addEventListener('click', () => void exportExcel());
