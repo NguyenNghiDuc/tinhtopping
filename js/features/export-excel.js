@@ -29,7 +29,7 @@ function currentLocalDate() {
 }
 
 function formatDate(isoDate) {
-  const [y, m, d] = String(isoDate).split('-');
+  const [y, m, d] = String(isoDate || '').split('-');
   return y && m && d ? `${d}/${m}/${y}` : String(isoDate || '');
 }
 
@@ -43,6 +43,7 @@ async function fetchAllShifts(client, date) {
       .order('shift', { ascending: true })
       .order('id', { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
+
     if (error) throw error;
     all.push(...(data || []));
     if (!data || data.length < PAGE_SIZE) break;
@@ -51,6 +52,8 @@ async function fetchAllShifts(client, date) {
 }
 
 async function fetchByIds(client, table, columns, key, ids) {
+  if (!ids.length) return [];
+
   const all = [];
   for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
     const idChunk = ids.slice(i, i + CHUNK_SIZE);
@@ -67,7 +70,7 @@ async function loadExcelRows(date) {
   if (!shifts.length) return [];
 
   const employeeIds = [...new Set(shifts.map((row) => row.employee_id).filter(Boolean))];
-  const shiftIds = shifts.map((row) => row.id);
+  const shiftIds = shifts.map((row) => row.id).filter(Boolean);
 
   const [employees, toppings] = await Promise.all([
     fetchByIds(client, 'employees', 'id,name', 'id', employeeIds),
@@ -76,8 +79,12 @@ async function loadExcelRows(date) {
 
   const employeeMap = new Map(employees.map((row) => [row.id, row.name]));
   const quantityMap = new Map();
+
   toppings.forEach((row) => {
-    quantityMap.set(row.shift_id, (quantityMap.get(row.shift_id) || 0) + Math.max(0, Number(row.quantity) || 0));
+    quantityMap.set(
+      row.shift_id,
+      (quantityMap.get(row.shift_id) || 0) + Math.max(0, Number(row.quantity) || 0)
+    );
   });
 
   return shifts.map((row) => {
@@ -101,7 +108,14 @@ function buildWorkbook(rows, date) {
     sheetName: `Topping ${formatDate(date)}`,
     title: `BÁO CÁO TOPPING NGÀY ${formatDate(date)}`,
     headers: ['Ngày', 'Ca', 'Nhân viên', 'Topping', 'Tiền', 'Ghi chú'],
-    rows: rows.map((row) => [formatDate(row.date), row.shift, row.employee, row.quantity, row.money, row.note]),
+    rows: rows.map((row) => [
+      formatDate(row.date),
+      row.shift,
+      row.employee,
+      row.quantity,
+      row.money,
+      row.note
+    ]),
     totals: ['Tổng cộng', '', '', totalQuantity, totalMoney, ''],
     widths: [13, 12, 24, 11, 14, 36]
   });
@@ -115,17 +129,30 @@ function setStatus(html, kind = '') {
   return host.firstElementChild;
 }
 
-function showManualDownload(filename, blob, summary) {
+function clearOldObjectUrl() {
   const host = $('#excelExportResult');
   if (!host) return;
-
   const previousUrl = host.dataset.objectUrl;
-  if (previousUrl) URL.revokeObjectURL(previousUrl);
+  if (previousUrl) {
+    URL.revokeObjectURL(previousUrl);
+    delete host.dataset.objectUrl;
+  }
+}
+
+function createDownload(filename, blob, summary) {
+  const host = $('#excelExportResult');
+  if (!host) throw new Error('Không tìm thấy vùng tải file Excel.');
+
+  clearOldObjectUrl();
 
   const url = URL.createObjectURL(blob);
   host.dataset.objectUrl = url;
 
-  const box = setStatus(`<strong>File Excel đã tạo xong.</strong><br><span>${esc(summary)}</span><br><span>Nếu hộp lưu file không mở hoặc bạn đã đóng nó, bấm nút dưới đây.</span><br>`, 'ok');
+  const box = setStatus(
+    `<strong>Đã tạo file Excel.</strong><br><span>${esc(summary)}</span><br><span>Nếu file chưa tự tải, bấm nút bên dưới.</span><br>`,
+    'ok'
+  );
+
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
@@ -134,24 +161,8 @@ function showManualDownload(filename, blob, summary) {
   link.style.cssText = 'display:inline-flex;align-items:center;margin-top:10px;text-decoration:none';
   link.textContent = `⬇ Tải ${filename}`;
   box?.appendChild(link);
-}
 
-function startNativeSave(filename) {
-  if (!window.isSecureContext || typeof window.showSaveFilePicker !== 'function') return null;
-  try {
-    return window.showSaveFilePicker({
-      suggestedName: filename,
-      types: [{
-        description: 'Excel Workbook',
-        accept: {
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
-        }
-      }]
-    });
-  } catch (error) {
-    console.warn('[Excel] Không mở được hộp lưu file.', error);
-    return null;
-  }
+  return link;
 }
 
 async function exportExcel() {
@@ -159,20 +170,19 @@ async function exportExcel() {
   if (!button) return;
 
   const dateInput = $('#excelDate');
-  const date = /^\d{4}-\d{2}-\d{2}$/.test(dateInput?.value || '') ? dateInput.value : currentLocalDate();
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(dateInput?.value || '')
+    ? dateInput.value
+    : currentLocalDate();
+
   const filename = `topping-${date}.xlsx`;
   const oldText = button.textContent;
 
-  // Quan trọng: mở hộp Save ngay trong click của người dùng, trước mọi await.
-  // Chrome sẽ giữ user activation và cho phép lưu file thật.
-  const saveHandlePromise = startNativeSave(filename);
-
   button.disabled = true;
-  button.textContent = 'Đang tạo Excel...';
-  setStatus(`Đang lấy dữ liệu ngày ${esc(formatDate(date))}...`);
+  button.textContent = 'Đang lấy dữ liệu...';
+  setStatus(`1/3 · Đang lấy dữ liệu ngày ${esc(formatDate(date))}...`);
 
   try {
-    console.info('[Excel] Bắt đầu xuất ngày', date);
+    console.info('[Excel] 1/3 Bắt đầu lấy dữ liệu ngày', date);
     const rows = await loadExcelRows(date);
     console.info('[Excel] Số dòng lấy được', rows.length);
 
@@ -182,30 +192,43 @@ async function exportExcel() {
       return;
     }
 
+    button.textContent = 'Đang tạo file...';
+    setStatus('2/3 · Đang tạo file .xlsx...');
+    console.info('[Excel] 2/3 Đang tạo workbook');
+
     const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
     const blob = buildWorkbook(rows, date);
     const summary = `${rows.length} dòng, tổng ${totalQuantity.toLocaleString('vi-VN')} topping.`;
 
-    // Luôn dựng nút tải tay trước để có fallback chắc chắn.
-    showManualDownload(filename, blob, summary);
+    const link = createDownload(filename, blob, summary);
 
-    if (saveHandlePromise) {
-      try {
-        const fileHandle = await saveHandlePromise;
-        const writable = await fileHandle.createWritable();
-        await writable.write(blob);
-        await writable.close();
-        setStatus(`<strong>Đã lưu ${esc(filename)} thành công.</strong><br><span>${esc(summary)}</span>`, 'ok');
-        notify(`Đã lưu ${filename}`, 4000);
-        return;
-      } catch (error) {
-        if (error?.name !== 'AbortError') {
-          console.warn('[Excel] Save picker lỗi, dùng nút tải dự phòng.', error);
-        }
-      }
+    button.textContent = 'Đang tải file...';
+    console.info('[Excel] 3/3 Đang kích hoạt tải file', filename);
+
+    try {
+      link.click();
+    } catch (error) {
+      console.warn('[Excel] Trình duyệt chặn tải tự động; dùng nút tải thủ công.', error);
     }
 
-    notify('File đã tạo xong. Bấm nút tải Excel bên dưới.', 5000);
+    setStatus(
+      `<strong>3/3 · Đã tạo file Excel.</strong><br><span>${esc(summary)}</span><br><span>Nếu Chrome chưa tải file, bấm nút tải bên dưới.</span><br>`,
+      'ok'
+    );
+
+    // setStatus ở trên thay DOM nên dựng lại nút tải tay một lần nữa.
+    const finalHost = $('#excelExportResult');
+    const finalBox = finalHost?.firstElementChild;
+    const manualLink = document.createElement('a');
+    manualLink.href = finalHost?.dataset.objectUrl || link.href;
+    manualLink.download = filename;
+    manualLink.rel = 'noopener';
+    manualLink.className = 'feature-btn primary';
+    manualLink.style.cssText = 'display:inline-flex;align-items:center;margin-top:10px;text-decoration:none';
+    manualLink.textContent = `⬇ Tải ${filename}`;
+    finalBox?.appendChild(manualLink);
+
+    notify(`Đã tạo ${filename}`, 4000);
   } catch (error) {
     console.error('[Excel] Xuất file thất bại.', error);
     const message = error?.message || 'Lỗi không xác định';
@@ -232,7 +255,7 @@ function boot() {
   panel.id = 'excelExportPanel';
   panel.innerHTML = `
     <h3>Xuất Excel</h3>
-    <p class="muted">Chọn ngày có dữ liệu rồi bấm Xuất Excel. Chrome sẽ mở hộp chọn nơi lưu file.</p>
+    <p class="muted">Bản thử đơn giản: chọn ngày có dữ liệu rồi bấm Xuất Excel.</p>
     <div class="feature-toolbar">
       <label>Ngày / tháng / năm<input id="excelDate" type="date"></label>
       <button class="feature-btn primary" id="featureExcel" type="button">Xuất Excel</button>
@@ -243,17 +266,18 @@ function boot() {
 
   const dateInput = $('#excelDate');
   dateInput.value = currentLocalDate();
-  dateInput.addEventListener('change', () => dateInput.blur());
 
   const button = $('#featureExcel');
-  button.onclick = () => void exportExcel();
-  console.info('[Excel] Panel Xuất Excel đã được khởi tạo.');
+  button.onclick = exportExcel;
+
+  console.info('[Excel] Bản đơn giản đã sẵn sàng.');
   return true;
 }
 
 function scheduleBoot() {
   if (boot()) return;
   if (bootRetryTimer || bootAttempts >= MAX_BOOT_ATTEMPTS) return;
+
   bootAttempts += 1;
   bootRetryTimer = setTimeout(() => {
     bootRetryTimer = null;
