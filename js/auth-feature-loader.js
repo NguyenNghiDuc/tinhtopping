@@ -11,6 +11,7 @@ const FEATURE_MODULES = [
   './features/editor-tools.js',
   './features/offline-draft.js',
   './features/employee-report.js',
+  './features/employee-delete.js',
   './features/settings-page.js',
   './features/dashboard-insights.js',
   './features/history-operations.js',
@@ -37,8 +38,6 @@ async function importFeatureModules() {
       }
     }
 
-    // Chỉ đánh dấu hoàn tất sau khi toàn bộ module đã được thử load.
-    // Module lỗi không làm các module còn lại bị chặn.
     featuresLoaded = true;
     document.dispatchEvent(new CustomEvent('topping:features-ready', {
       detail: { failed }
@@ -56,9 +55,6 @@ function hasAuthenticatedSession(session) {
 
 async function init() {
   const client = requireSupabase();
-
-  // Dùng session hiện có đúng một lần lúc khởi động.
-  // Không gọi getSession() bên trong onAuthStateChange để tránh race/deadlock.
   const { data, error } = await client.auth.getSession();
   if (error) console.warn('Không đọc được phiên đăng nhập để tải tính năng.', error);
   if (hasAuthenticatedSession(data?.session)) await importFeatureModules();
@@ -67,14 +63,11 @@ async function init() {
     if (!hasAuthenticatedSession(session)) return;
     if (!['SIGNED_IN', 'TOKEN_REFRESHED', 'INITIAL_SESSION', 'USER_UPDATED'].includes(event)) return;
 
-    // Thoát khỏi callback auth trước rồi mới import module.
     setTimeout(() => {
       void importFeatureModules();
     }, 0);
   });
 
-  // app.js phát event này sau khi role + dữ liệu lõi đã tải xong.
-  // Đây là đường load an toàn nhất khi đăng nhập ngay trong phiên hiện tại.
   document.addEventListener('topping:session-ready', () => {
     void importFeatureModules();
   });
