@@ -1,4 +1,4 @@
-const CACHE = 'tinhtopping-v12';
+const CACHE = 'tinhtopping-v13';
 const ASSETS = [
   './',
   './index.html',
@@ -10,16 +10,6 @@ const ASSETS = [
   './public/css/statistics-polish.css',
   './public/css/pro-tools.css',
   './js/app.js',
-  './js/batch-fix.js',
-  './js/quantity-input-fix.js',
-  './js/employee-delete.js',
-  './js/productivity.js',
-  './js/convenience.js',
-  './js/convenience-day-delete.js',
-  './js/auth-feature-loader.js',
-  './js/advanced.js',
-  './js/stats-all-employees.js',
-  './js/pro-tools.js',
   './js/calculator.js',
   './js/config.js',
   './js/database.js',
