@@ -15,7 +15,6 @@
   <link rel="stylesheet" href="./public/css/statistics-polish.css">
   <link rel="stylesheet" href="./public/css/pro-tools.css">
   <script>
-    // Keep stale PWA/cache state from taking control while all feature modules are enabled.
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.getRegistrations()
         .then((registrations) => Promise.all(registrations.map((registration) => registration.unregister())))
@@ -36,10 +35,6 @@
   </script>
   <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
   <script type="module" src="./js/app.js"></script>
-  <script type="module" src="./js/batch-fix.js"></script>
-  <script type="module" src="./js/employee-delete.js"></script>
-  <script type="module" src="./js/productivity.js"></script>
-  <script type="module" src="./js/convenience.js"></script>
   <script type="module" src="./js/auth-feature-loader.js"></script>
 </head>
 <body>
