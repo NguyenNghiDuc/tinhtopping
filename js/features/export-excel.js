@@ -1,5 +1,5 @@
 import { requireSupabase } from '../supabase.js';
-import { $ } from './shared.js';
+import { $, notify } from './shared.js';
 import { buildXlsxBlob } from './xlsx-lite.js';
 
 const SHIFT_LABELS = {
@@ -8,24 +8,18 @@ const SHIFT_LABELS = {
   evening: 'Ca Tối'
 };
 
-const PAGE_SIZE = 500;
-const IN_CHUNK_SIZE = 50;
+const PAGE_SIZE = 500;   // số dòng mỗi lần lấy từ Supabase (giới hạn mặc định là 1000)
+const CHUNK_SIZE = 50;   // số id mỗi lần dùng cho .in(...) để URL không quá dài
 
-function getLocalMonthValue(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  return `${year}-${month}`;
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  })[char]);
 }
 
-function formatDateVi(value) {
-  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (!match) return String(value || '');
-  return `${match[3]}/${match[2]}/${match[1]}`;
-}
-
-function formatMonthVi(value) {
-  const match = String(value || '').match(/^(\d{4})-(\d{2})$/);
-  return match ? `${match[2]}/${match[1]}` : String(value || '');
+function currentLocalMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function monthBounds(month) {
@@ -35,49 +29,37 @@ function monthBounds(month) {
   return [`${month}-01`, `${nextYear}-${String(nextMonth).padStart(2, '0')}-01`];
 }
 
-function resolveExportMonth() {
-  const explicit = $('#excelMonth')?.value || $('#recordsMonth')?.value || getLocalMonthValue();
-  if ($('#excelMonth')) $('#excelMonth').value = explicit;
-  return explicit;
+function formatDate(isoDate) {
+  const [y, m, d] = String(isoDate).split('-');
+  return y && m && d ? `${d}/${m}/${y}` : String(isoDate || '');
 }
 
-function setExportStatus(message, tone = 'info') {
-  const status = $('#excelExportResult');
-  if (!status) return;
-  status.textContent = message;
-  status.dataset.tone = tone;
-  status.hidden = !message;
-  status.setAttribute('role', 'status');
-  status.setAttribute('aria-live', 'polite');
-}
-
-function chunk(list, size) {
-  const result = [];
-  for (let index = 0; index < list.length; index += size) {
-    result.push(list.slice(index, index + size));
-  }
-  return result;
-}
-
-async function fetchPaged(makeQuery) {
-  const rows = [];
-  for (let from = 0; ; from += PAGE_SIZE) {
-    const to = from + PAGE_SIZE - 1;
-    const result = await makeQuery().range(from, to);
-    if (result.error) throw result.error;
-    const page = result.data || [];
-    rows.push(...page);
-    if (page.length < PAGE_SIZE) break;
-  }
-  return rows;
-}
-
-async function fetchByChunks(ids, buildQuery) {
-  if (!ids.length) return [];
+async function fetchAllShifts(client, start, end) {
   const all = [];
-  for (const idChunk of chunk(ids, IN_CHUNK_SIZE)) {
-    const rows = await fetchPaged(() => buildQuery(idChunk));
-    all.push(...rows);
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await client
+      .from('shifts')
+      .select('id,sales_date,shift,employee_id,note')
+      .gte('sales_date', start)
+      .lt('sales_date', end)
+      .order('sales_date', { ascending: true })
+      .order('shift', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+    if (error) throw error;
+    all.push(...(data || []));
+    if (!data || data.length < PAGE_SIZE) break;
+  }
+  return all;
+}
+
+async function fetchByIds(client, table, columns, key, ids) {
+  const all = [];
+  for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+    const chunk = ids.slice(i, i + CHUNK_SIZE);
+    const { data, error } = await client.from(table).select(columns).in(key, chunk);
+    if (error) throw error;
+    all.push(...(data || []));
   }
   return all;
 }
@@ -86,35 +68,21 @@ async function loadExcelRows(month) {
   const client = requireSupabase();
   const [start, end] = monthBounds(month);
 
-  const shifts = await fetchPaged(() => client
-    .from('shifts')
-    .select('id,sales_date,shift,employee_id,note')
-    .gte('sales_date', start)
-    .lt('sales_date', end)
-    .order('sales_date', { ascending: true })
-    .order('shift', { ascending: true })
-    .order('id', { ascending: true }));
-
+  const shifts = await fetchAllShifts(client, start, end);
   if (!shifts.length) return [];
 
   const employeeIds = [...new Set(shifts.map((row) => row.employee_id).filter(Boolean))];
-  const shiftIds = shifts.map((row) => row.id).filter(Boolean);
+  const shiftIds = shifts.map((row) => row.id);
 
-  const employees = await fetchByChunks(
-    employeeIds,
-    (ids) => client.from('employees').select('id,name').in('id', ids).order('name', { ascending: true })
-  );
-
-  const toppings = await fetchByChunks(
-    shiftIds,
-    (ids) => client.from('shift_toppings').select('shift_id,quantity').in('shift_id', ids).order('shift_id', { ascending: true })
-  );
+  const [employees, toppings] = await Promise.all([
+    fetchByIds(client, 'employees', 'id,name', 'id', employeeIds),
+    fetchByIds(client, 'shift_toppings', 'shift_id,quantity', 'shift_id', shiftIds)
+  ]);
 
   const employeeMap = new Map(employees.map((row) => [row.id, row.name]));
   const quantityMap = new Map();
   toppings.forEach((row) => {
-    const current = quantityMap.get(row.shift_id) || 0;
-    quantityMap.set(row.shift_id, current + Math.max(0, Number(row.quantity) || 0));
+    quantityMap.set(row.shift_id, (quantityMap.get(row.shift_id) || 0) + Math.max(0, Number(row.quantity) || 0));
   });
 
   return shifts.map((row) => {
@@ -130,47 +98,66 @@ async function loadExcelRows(month) {
   });
 }
 
-function renderDownloadButton(filename, blob, rowCount, totalQuantity) {
-  const host = $('#excelExportResult');
-  if (!host) throw new Error('Không tìm thấy vùng hiển thị kết quả xuất Excel.');
+function buildWorkbook(rows, month) {
+  const [year, monthNumber] = month.split('-');
+  const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
+  const totalMoney = rows.reduce((sum, row) => sum + row.money, 0);
 
+  return buildXlsxBlob({
+    sheetName: `Topping ${monthNumber}-${year}`,
+    title: `BÁO CÁO TOPPING THÁNG ${monthNumber}/${year}`,
+    headers: ['Ngày', 'Ca', 'Nhân viên', 'Topping', 'Tiền', 'Ghi chú'],
+    rows: rows.map((row) => [formatDate(row.date), row.shift, row.employee, row.quantity, row.money, row.note]),
+    totals: ['Tổng cộng', '', '', totalQuantity, totalMoney, ''],
+    widths: [13, 12, 24, 11, 14, 36]
+  });
+}
+
+function setStatus(html, kind = '') {
+  const host = $('#excelExportResult');
+  if (!host) return null;
   const previousUrl = host.dataset.objectUrl;
+  if (previousUrl && kind !== 'ok') {
+    URL.revokeObjectURL(previousUrl);
+    delete host.dataset.objectUrl;
+  }
+  host.innerHTML = `<div class="feature-warning ${kind === 'ok' ? 'feature-ok' : ''}">${html}</div>`;
+  return host.firstElementChild;
+}
+
+function showDownload(filename, blob, summary) {
+  const host = $('#excelExportResult');
+  const previousUrl = host?.dataset.objectUrl;
   if (previousUrl) URL.revokeObjectURL(previousUrl);
 
   const url = URL.createObjectURL(blob);
-  host.dataset.objectUrl = url;
-  host.replaceChildren();
-  host.hidden = false;
-  host.dataset.tone = 'success';
-  host.setAttribute('role', 'status');
-  host.setAttribute('aria-live', 'polite');
+  if (host) host.dataset.objectUrl = url;
 
-  const summary = document.createElement('p');
-  summary.textContent = `Đã tạo ${rowCount} dòng. Tổng topping: ${totalQuantity.toLocaleString('vi-VN')}.`;
-  host.appendChild(summary);
-
+  const box = setStatus(`<strong>Đã tạo xong file Excel.</strong><br><span>${esc(summary)}</span><br>`, 'ok');
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
-  link.rel = 'noopener';
   link.className = 'feature-btn primary';
-  link.style.display = 'inline-flex';
-  link.textContent = `Tải ${filename}`;
-  host.appendChild(link);
-  return link;
+  link.style.cssText = 'display:inline-flex;align-items:center;margin-top:10px;text-decoration:none';
+  link.textContent = `⬇ Tải ${filename}`;
+  box?.appendChild(link);
+
+  // Thử tải tự động; nếu trình duyệt chặn thì nút phía trên vẫn dùng được.
+  try { link.click(); } catch (error) { console.warn('[Excel] Không tự tải được.', error); }
 }
 
 async function exportExcel() {
   const button = $('#featureExcel');
   if (!button) return;
 
-  const month = resolveExportMonth();
+  const monthInput = $('#excelMonth');
+  const month = /^\d{4}-\d{2}$/.test(monthInput?.value || '') ? monthInput.value : currentLocalMonth();
   const filename = `topping-${month}.xlsx`;
   const oldText = button.textContent;
 
   button.disabled = true;
   button.textContent = 'Đang tạo Excel...';
-  setExportStatus('Đang lấy dữ liệu...', 'info');
+  setStatus(`Đang lấy dữ liệu tháng ${esc(month)}...`);
 
   try {
     console.info('[Excel] Bắt đầu xuất tháng', month);
@@ -178,42 +165,20 @@ async function exportExcel() {
     console.info('[Excel] Số dòng lấy được', rows.length);
 
     if (!rows.length) {
-      const message = `Tháng ${formatMonthVi(month)} chưa có dữ liệu để xuất.`;
-      setExportStatus(message, 'warning');
+      setStatus(`<strong>Tháng ${esc(month)} chưa có dữ liệu để xuất.</strong><br>Hãy đổi sang tháng có nhập topping ở ô "Tháng" phía trên.`);
+      notify(`Tháng ${month} chưa có dữ liệu để xuất.`, 5000);
       return;
     }
 
     const totalQuantity = rows.reduce((sum, row) => sum + row.quantity, 0);
-    const headers = ['Ngày', 'Ca', 'Nhân viên', 'Topping', 'Tiền', 'Ghi chú'];
-    const data = rows.map((row) => [
-      formatDateVi(row.date),
-      row.shift,
-      row.employee,
-      row.quantity,
-      row.money,
-      row.note
-    ]);
-    const totals = ['Tổng cộng', '', '', totalQuantity, totalQuantity * 1000, ''];
-    const blob = buildXlsxBlob({
-      sheetName: `Topping ${formatMonthVi(month)}`,
-      title: `BÁO CÁO TOPPING THÁNG ${formatMonthVi(month)}`,
-      headers,
-      rows: data,
-      totals,
-      widths: [13, 14, 24, 14, 16, 36]
-    });
-    const link = renderDownloadButton(filename, blob, rows.length, totalQuantity);
-
-    try {
-      link.click();
-    } catch (error) {
-      console.warn('[Excel] Tải tự động bị chặn. Dùng nút tải thủ công.', error);
-    }
-
+    const blob = buildWorkbook(rows, month);
+    showDownload(filename, blob, `${rows.length} dòng, tổng ${totalQuantity.toLocaleString('vi-VN')} topping.`);
+    notify(`Đã tạo ${filename}`, 4000);
   } catch (error) {
     console.error('[Excel] Xuất file thất bại.', error);
-    const message = error?.message ?? String(error);
-    setExportStatus(message, 'error');
+    const message = error?.message || 'Lỗi không xác định';
+    setStatus(`<strong>Xuất Excel lỗi:</strong> ${esc(message)}`);
+    notify(`Xuất Excel lỗi: ${message}`, 6000);
   } finally {
     button.disabled = false;
     button.textContent = oldText;
@@ -227,19 +192,21 @@ function boot() {
   const panel = document.createElement('section');
   panel.className = 'feature-panel';
   panel.id = 'excelExportPanel';
-  const initialMonth = $('#recordsMonth')?.value || getLocalMonthValue();
   panel.innerHTML = `
     <h3>Xuất Excel</h3>
-    <p class="muted">Chọn tháng cần xuất dữ liệu.</p>
+    <p class="muted">Chọn tháng rồi bấm nút để tạo file Excel (.xlsx).</p>
     <div class="feature-toolbar">
-      <label class="field-label" for="excelMonth">Tháng
-        <input id="excelMonth" type="month" value="${initialMonth}">
-      </label>
+      <label>Tháng<input id="excelMonth" type="month"></label>
       <button class="feature-btn primary" id="featureExcel" type="button">Xuất Excel</button>
     </div>
-    <div id="excelExportResult" class="feature-status" style="margin-top: 12px" hidden></div>
+    <div id="excelExportResult" style="margin-top:12px"></div>
   `;
   host.prepend(panel);
+
+  const monthInput = $('#excelMonth');
+  const recordsMonth = $('#recordsMonth')?.value;
+  monthInput.value = /^\d{4}-\d{2}$/.test(recordsMonth || '') ? recordsMonth : currentLocalMonth();
+
   $('#featureExcel').addEventListener('click', () => void exportExcel());
 }
 
