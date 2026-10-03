@@ -12,6 +12,7 @@ const FEATURE_MODULES = [
   './advanced.js',
   './stats-all-employees.js',
   './pro-tools.js',
+  './features/account-security.js',
   './advanced-tools.js'
 ];
 
