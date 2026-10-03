@@ -1,77 +1,12 @@
 import { $, fetchMonthRows, rowQuantity, money, installStyle } from './shared.js';
 
 const SHIFT_LABELS = { morning: 'Ca Sáng', afternoon: 'Ca Chiều', evening: 'Ca Tối' };
-
-async function refreshOptions() {
-  const select = $('#employeeReportSelect');
-  const month = $('#statisticsMonth')?.value || $('#recordsMonth')?.value;
-  if (!select || !month) return;
-  try {
-    const rows = await fetchMonthRows(month);
-    const current = select.value;
-    const names = [...new Set(rows.map((row) => row.employees?.name).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'vi'));
-    select.innerHTML = '<option value="">Chọn nhân viên</option>' + names.map((name) => `<option value="${name.replace(/"/g,'&quot;')}">${name}</option>`).join('');
-    if (names.includes(current)) select.value = current;
-  } catch (error) {
-    console.warn('Không tải được danh sách báo cáo nhân viên.', error);
-  }
-}
-
-async function loadReport() {
-  const month = $('#statisticsMonth')?.value;
-  const select = $('#employeeReportSelect');
-  const output = $('#employeeReportOutput');
-  if (!month || !select?.value || !output) return;
-  output.innerHTML = '<p class="muted">Đang tải...</p>';
-  try {
-    const rows = (await fetchMonthRows(month)).filter((row) => row.employees?.name === select.value);
-    const totalQty = rows.reduce((sum, row) => sum + rowQuantity(row), 0);
-    output.innerHTML = `
-      <div class="feature-report-summary">
-        <div><span>Số ca</span><strong>${rows.length}</strong></div>
-        <div><span>Tổng topping</span><strong>${totalQty.toLocaleString('vi-VN')}</strong></div>
-        <div><span>Tổng tiền</span><strong>${money(totalQty * 1000)}</strong></div>
-      </div>
-      <div class="table-scroll"><table class="data-table compact-table"><thead><tr><th>Ngày</th><th>Ca</th><th class="numeric">Topping</th><th class="numeric">Tiền</th></tr></thead><tbody>
-        ${rows.map((row) => { const q = rowQuantity(row); return `<tr><td>${row.sales_date.split('-').reverse().join('/')}</td><td>${SHIFT_LABELS[row.shift] || row.shift}</td><td class="numeric">${q.toLocaleString('vi-VN')}</td><td class="numeric">${money(q * 1000)}</td></tr>`; }).join('') || '<tr><td colspan="4">Chưa có dữ liệu.</td></tr>'}
-      </tbody></table></div>`;
-  } catch (error) {
-    output.innerHTML = `<p class="muted">${error?.message || 'Không tải được báo cáo.'}</p>`;
-  }
-}
-
-function init() {
-  if (document.body.dataset.featureEmployeeReport === '1') return;
-  document.body.dataset.featureEmployeeReport = '1';
-  const statsPanel = $('#view-statistics .stats-panel');
-  if (!statsPanel || $('#employeeReportPanel')) return;
-
-  installStyle('feature-employee-report-style', `
-    .feature-report-panel{margin-top:18px;padding-top:16px;border-top:1px solid #e5e7eb}
-    .feature-report-controls{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:14px}
-    .feature-report-controls label{display:grid;gap:5px;font:700 11px 'DM Sans',sans-serif;color:#64748b}
-    .feature-report-controls select{min-width:220px;min-height:38px;border:1px solid #dbe3ef;border-radius:8px;padding:7px 10px;background:#fff}
-    .feature-report-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}
-    .feature-report-summary>div{padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc}
-    .feature-report-summary span{display:block;font-size:11px;color:#64748b}.feature-report-summary strong{display:block;margin-top:4px;font-size:18px}
-    @media(max-width:760px){.feature-report-summary{grid-template-columns:1fr}.feature-report-controls>*{width:100%}.feature-report-controls select{width:100%;min-width:0}}
-  `);
-
-  const panel = document.createElement('div');
-  panel.id = 'employeeReportPanel';
-  panel.className = 'feature-report-panel';
-  panel.innerHTML = `
-    <div class="panel-title"><div><h3>Báo cáo chi tiết nhân viên</h3><p class="muted">Xem từng ca, tổng topping và tổng tiền theo tháng.</p></div></div>
-    <div class="feature-report-controls">
-      <label>Nhân viên<select id="employeeReportSelect"><option value="">Chọn nhân viên</option></select></label>
-      <button type="button" id="loadEmployeeReport" class="advanced-toolbar-button">Xem báo cáo</button>
-    </div>
-    <div id="employeeReportOutput"></div>`;
-  statsPanel.appendChild(panel);
-
-  $('#loadEmployeeReport')?.addEventListener('click', () => void loadReport());
-  $('#statisticsMonth')?.addEventListener('change', () => void refreshOptions());
-  void refreshOptions();
-}
-
+const isoToday=()=>new Date().toISOString().slice(0,10);
+const monthToday=()=>isoToday().slice(0,7);
+function weekBounds(value){const [y,w]=String(value||'').split('-W').map(Number);if(!y||!w)return null;const jan4=new Date(Date.UTC(y,0,4)),day=jan4.getUTCDay()||7,monday=new Date(jan4);monday.setUTCDate(jan4.getUTCDate()-day+1+(w-1)*7);const end=new Date(monday);end.setUTCDate(monday.getUTCDate()+6);return [monday.toISOString().slice(0,10),end.toISOString().slice(0,10)]}
+async function periodRows(){const mode=$('#employeeReportPeriod')?.value||'month';if(mode==='day'){const d=$('#employeeReportDate').value;return (await fetchMonthRows(d.slice(0,7))).filter(r=>r.sales_date===d)}if(mode==='week'){const b=weekBounds($('#employeeReportWeek').value);if(!b)return[];const months=[b[0].slice(0,7),b[1].slice(0,7)],rows=[...(await fetchMonthRows(months[0]))];if(months[1]!==months[0])rows.push(...await fetchMonthRows(months[1]));return rows.filter(r=>r.sales_date>=b[0]&&r.sales_date<=b[1])}return fetchMonthRows($('#employeeReportMonth').value)}
+async function refreshOptions(){const select=$('#employeeReportSelect');if(!select)return;try{const rows=await periodRows(),current=select.value,names=[...new Set(rows.map(r=>r.employees?.name).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'vi'));select.innerHTML='<option value="">Chọn nhân viên</option>'+names.map(n=>`<option value="${n.replace(/"/g,'&quot;')}">${n}</option>`).join('');if(names.includes(current))select.value=current}catch(e){console.warn(e)}}
+async function loadReport(){const select=$('#employeeReportSelect'),output=$('#employeeReportOutput');if(!select?.value||!output)return;output.innerHTML='<p class="muted">Đang tải...</p>';try{const rows=(await periodRows()).filter(r=>r.employees?.name===select.value),total=rows.reduce((s,r)=>s+rowQuantity(r),0);output.innerHTML=`<div class="feature-report-summary"><div><span>Số ca</span><strong>${rows.length}</strong></div><div><span>Tổng topping</span><strong>${total.toLocaleString('vi-VN')}</strong></div><div><span>Tổng tiền</span><strong>${money(total*1000)}</strong></div></div><div class="table-scroll"><table class="data-table compact-table"><thead><tr><th>Ngày</th><th>Ca</th><th class="numeric">Topping</th><th class="numeric">Tiền</th></tr></thead><tbody>${rows.map(r=>{const q=rowQuantity(r);return `<tr><td>${r.sales_date.split('-').reverse().join('/')}</td><td>${SHIFT_LABELS[r.shift]||r.shift}</td><td class="numeric">${q}</td><td class="numeric">${money(q*1000)}</td></tr>`}).join('')||'<tr><td colspan="4">Chưa có dữ liệu.</td></tr>'}</tbody></table></div>`}catch(e){output.innerHTML=`<p class="muted">${e.message||'Không tải được báo cáo.'}</p>`}}
+function syncPeriodControls(){const mode=$('#employeeReportPeriod').value;$('#employeeReportMonth').hidden=mode!=='month';$('#employeeReportDate').hidden=mode!=='day';$('#employeeReportWeek').hidden=mode!=='week';refreshOptions()}
+function init(){if(document.body.dataset.featureEmployeeReport==='1')return;document.body.dataset.featureEmployeeReport='1';const statsPanel=$('#view-statistics .stats-panel');if(!statsPanel||$('#employeeReportPanel'))return;installStyle('feature-employee-report-style',`.feature-report-panel{margin-top:18px;padding-top:16px;border-top:1px solid #e5e7eb}.feature-report-controls{display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin-bottom:14px}.feature-report-controls label{display:grid;gap:5px;font:700 11px 'DM Sans',sans-serif;color:#64748b}.feature-report-controls select,.feature-report-controls input{min-height:38px;border:1px solid #dbe3ef;border-radius:8px;padding:7px 10px;background:#fff}.feature-report-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}.feature-report-summary>div{padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc}@media(max-width:760px){.feature-report-summary{grid-template-columns:1fr}.feature-report-controls>*{width:100%}}`);const now=isoToday();const panel=document.createElement('div');panel.id='employeeReportPanel';panel.className='feature-report-panel';panel.innerHTML=`<div class="panel-title"><div><h3>Báo cáo chi tiết nhân viên</h3><p class="muted">Theo ngày, tuần hoặc tháng.</p></div></div><div class="feature-report-controls"><label>Kỳ<select id="employeeReportPeriod"><option value="month">Tháng</option><option value="week">Tuần</option><option value="day">Ngày</option></select></label><input id="employeeReportMonth" type="month" value="${monthToday()}"><input id="employeeReportWeek" type="week" hidden><input id="employeeReportDate" type="date" value="${now}" hidden><label>Nhân viên<select id="employeeReportSelect"><option value="">Chọn nhân viên</option></select></label><button type="button" id="loadEmployeeReport" class="feature-btn">Xem báo cáo</button></div><div id="employeeReportOutput"></div>`;statsPanel.appendChild(panel);$('#employeeReportPeriod').onchange=syncPeriodControls;['employeeReportMonth','employeeReportWeek','employeeReportDate'].forEach(id=>$('#'+id).onchange=refreshOptions);$('#loadEmployeeReport').onclick=loadReport;refreshOptions()}
 init();
